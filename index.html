@@ -116,7 +116,6 @@
       text-align: center;
       padding: 12px;
       user-select: none;
-      cursor: pointer;
     }
     .bigText {
       max-width: 900px;
@@ -165,6 +164,7 @@
       display: none;
       place-items: center;
       padding: 16px;
+      z-index: 9999;
     }
     .modalInner {
       width: min(620px, 96vw);
@@ -212,10 +212,10 @@
 
           <div class="hr"></div>
 
-          <div class="label">Optional: paste a deck (TSV or CSV)</div>
-          <textarea id="csvPaste" placeholder="front[TAB]back[TAB]answer[TAB]choices[TAB]hint[TAB]tag[TAB]difficulty[TAB]front_image[TAB]back_image&#10;2+2[TAB]4[TAB]4[TAB]3|4|5|6[TAB]Think pairs[TAB]math[TAB]1[TAB][TAB]"></textarea>
+          <div class="label">Optional: paste TSV/CSV</div>
+          <textarea id="csvPaste" placeholder="front	back	answer	choices	hint	tag	difficulty	front_image	back_image&#10;2+2	4	4	3|4|5|6	Think pairs	math	1		"></textarea>
           <div class="row" style="margin-top:10px;">
-            <button class="btn secondary" id="loadPaste">Load pasted deck</button>
+            <button class="btn secondary" id="loadPaste">Load pasted</button>
           </div>
 
           <div class="hr"></div>
@@ -258,16 +258,15 @@
 
           <div class="label">Start a sprint</div>
           <div class="row">
-            <button class="btn good" data-sprint="120" id="s2">2 min</button>
-            <button class="btn good" data-sprint="300" id="s5">5 min</button>
-            <button class="btn good" data-sprint="600" id="s10">10 min</button>
+            <button class="btn good" data-sprint="120">2 min</button>
+            <button class="btn good" data-sprint="300">5 min</button>
+            <button class="btn good" data-sprint="600">10 min</button>
             <button class="btn danger" id="stop">Stop</button>
           </div>
 
           <div class="hr"></div>
 
           <div class="tiny">
-            Click the card to flip it.<br/>
             Power-ups charge on correct answers. Boss battle triggers after a few misses.
             Loot drops every 10 correct. Saved locally only.
           </div>
@@ -296,7 +295,7 @@
             </div>
           </div>
 
-          <div class="content" id="contentArea" title="Click to flip">
+          <div class="content" id="contentArea">
             <div>
               <div class="bigText" id="cardText">Load a deck and start a sprint.</div>
               <img class="img" id="cardImg" alt="" />
@@ -326,7 +325,7 @@
             </div>
 
             <div class="tiny">
-              Keys: <span class="k">Enter</span> submit · <span class="k">H</span> hint · <span class="k">S</span> skip · <span class="k">R</span> reveal · <span class="k">F</span> flip
+              Keys: <span class="k">Enter</span> submit · <span class="k">H</span> hint · <span class="k">S</span> skip · <span class="k">R</span> reveal
             </div>
           </div>
         </div>
@@ -334,7 +333,7 @@
     </div>
   </div>
 
-  <!-- Loot / Boss / End modal -->
+  <!-- Modal -->
   <div class="modal" id="modal">
     <div class="modalInner">
       <h2 class="modalTitle" id="modalTitle">Loot drop</h2>
@@ -348,45 +347,48 @@
 
 <script>
   // -----------------------------
-  // CSV/TSV parsing (robust)
+  // Utility helpers
   // -----------------------------
-  function cleanText(raw) {
-    let t = String(raw ?? "");
-    if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1); // UTF-8 BOM
-    t = t.replace(/\u0000/g, ""); // Excel/UTF-16 nulls
-    t = t.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    return t;
-  }
-
-  function safeInt(v, fallback = 0) {
-    const n = parseInt(String(v ?? "").trim(), 10);
+  function safeInt(v, fallback) {
+    const n = parseInt(String(v || "").trim(), 10);
     return Number.isFinite(n) ? n : fallback;
   }
 
-  function normalizeHeader(h) {
-    return String(h || "")
+  function normalizeHeader(s) {
+    return String(s || "")
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "_")
-      .replace(/[^\w_]/g, "");
+      .replace(/[^a-z0-9_]/g, "");
   }
 
+  function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+  // -----------------------------
+  // Delimiter detection + parsing
+  // -----------------------------
   function detectDelimiter(text) {
-    text = cleanText(text);
-    const firstLine = text.split("\n").find(l => l.trim().length > 0) || "";
+    const firstLine = text
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .find(l => l.trim().length > 0) || "";
+
     const commas = (firstLine.match(/,/g) || []).length;
     const tabs = (firstLine.match(/\t/g) || []).length;
+
     if (tabs > 0 && tabs >= commas) return "\t";
     return ",";
   }
 
+  // Delimiter-aware parser supporting quotes/newlines
   function parseDelimited(text, delimiter) {
-    text = cleanText(text);
-
     const rows = [];
     let row = [];
     let cell = "";
     let inQuotes = false;
+
+    text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
     for (let i = 0; i < text.length; i++) {
       const ch = text[i];
@@ -421,7 +423,7 @@
   }
 
   // -----------------------------
-  // State
+  // State + DOM
   // -----------------------------
   const el = {
     file: document.getElementById("file"),
@@ -448,7 +450,6 @@
     cardText: document.getElementById("cardText"),
     cardImg: document.getElementById("cardImg"),
     hintBox: document.getElementById("hintBox"),
-    contentArea: document.getElementById("contentArea"),
 
     answerArea: document.getElementById("answerArea"),
     typedAnswer: document.getElementById("typedAnswer"),
@@ -466,7 +467,6 @@
 
     gotIt: document.getElementById("gotIt"),
     missedIt: document.getElementById("missedIt"),
-
     stop: document.getElementById("stop"),
 
     modal: document.getElementById("modal"),
@@ -476,16 +476,14 @@
     closeModal: document.getElementById("closeModal"),
   };
 
-  // Deck structure:
   // decks = [{ name, cards: [{front,back,answer,choices[],hint,tag,difficulty,imgFront,imgBack}] }]
   let decks = [];
   let running = false;
-  let sprintSeconds = 0;
   let remaining = 0;
   let tickHandle = null;
 
   let current = null; // { deckIndex, cardIndex, card }
-  let filteredIndexByDeck = []; // for each deck, list of card indices that pass difficulty filter
+  let filteredIndexByDeck = [];
 
   // Session stats
   let correct = 0;
@@ -494,54 +492,49 @@
   let power = 0; // max 5
 
   // Boss system
-  let missQueue = []; // store {deckIndex, cardIndex}
+  let missQueue = [];
   let inBoss = false;
   let bossHP = 0;
 
   // Freeze timer
   let freezeUntil = 0;
 
-  // Card face state
+  // Reveal state
   let showingBack = false;
 
-  // Loot storage
+  // Local storage
   const LS_KEY = "questcards_loot_v1";
   const LS_BEST = "questcards_best_v1";
 
   const LOOT = ["✨", "🧿", "🦊", "🐉", "🦄", "🪐", "🧠", "⚡", "🧩", "🗝️", "🌙", "🦇", "🕯️", "🎧", "📚"];
+
+  // 25 movement prompts
   const MOVES = [
-    const MOVES = [
-  "Stand up and stretch your arms like you are charging solar panels ☀️",
-  "Do 5 wall pushes. Yes, like a hero in training 🦸",
-  "Spin once like a confused satellite 🪐",
-  "Touch a doorway, come back, and take one slow breath 🌬️",
-  "Shake out your hands and shoulders like a cat resetting its soul 🐈",
-
-  "March in place for 10 steps like you are entering a boss arena 🥾",
-  "Do 3 slow shoulder rolls forward, then 3 backward 🌀",
-  "Reach for the ceiling, then touch your toes (or your knees). Two times 🧍",
-  "Make a big side stretch left, then right. Hold each for 3 seconds 🌙",
-  "Stand tall and squeeze your shoulder blades together 5 times 🧲",
-
-  "Do 5 calf raises like you are trying to peek over a fence 🧗",
-  "Wiggle your fingers like you are casting a spell. Ten seconds ✨",
-  "Do 5 gentle neck turns: left, center, right, center 🧠",
-  "Pretend you are rowing a boat: pull elbows back 8 times 🚣",
-  "Do 6 slow air punches (soft, controlled) 🥊",
-
-  "Walk to the nearest wall and back like you are on a secret mission 🕵️",
-  "Balance on one foot for 5 seconds, then switch. No judgment if you wobble 🧘",
-  "Do 5 slow squats to a chair height (or half-squats). Easy mode is allowed 🪑",
-  "Make 10 “jazz hands” and then relax your arms 🎭",
-  "Do 5 gentle torso twists left and right like you are scanning for treasure 🗺️",
-
-  "Stand up, sit down. Repeat 3 times like a loading screen ritual ⏳",
-  "Take 8 big breaths while raising arms up and lowering them down 🌊",
-  "Do 10 heel taps in place like you are keeping time for a song 🎶",
-  "Shake one leg out for 5 seconds, then the other. Loose noodles only 🍜",
-  "Do 5 “invisible jump rope” hops (or tiny bounces). Quiet feet 🪢"
-];
-
+    "Stand up and stretch your arms like you are charging solar panels ☀️",
+    "Do 5 wall pushes. Yes, like a hero in training 🦸",
+    "Spin once like a confused satellite 🪐",
+    "Touch a doorway, come back, and breathe once slow 🌬️",
+    "Shake out your hands and shoulders like a cat resetting its soul 🐈",
+    "Do 10 marching steps in place like you are leading an expedition 🥾",
+    "Roll your shoulders 6 times like you are shrugging off a villain monologue 😈",
+    "Stand tall and do 3 slow deep breaths like a lighthouse in a storm 🌊",
+    "Do 5 calf raises like you are powering up rocket boosters 🚀",
+    "Do a gentle forward fold for 10 seconds like you are downloading calm 🧘",
+    "Do 8 toe taps on each foot like you are entering a cheat code 🎮",
+    "Reach up, then touch your toes, repeat 4 times like a stretchy noodle 🧬",
+    "Do 5 big arm circles like you are stirring a cosmic soup 🥣",
+    "Take 12 steps and count them out loud like a scientist verifying data 🔬",
+    "Do 5 slow neck tilts (each side) like you are scanning for clues 🕵️",
+    "Stand on one foot for 10 seconds like a flamingo judge 🦩",
+    "Do 6 gentle twists side-to-side like you are wringing out stress 🧽",
+    "Shake your legs out for 8 seconds like you are rebooting your OS 💻",
+    "Do 5 “air punches” slowly like you are fighting procrastination 🥊",
+    "Pretend you are opening a giant door: pull back 6 times 🚪",
+    "Walk to get water (or fake it) like you are on a secret mission 🥤",
+    "Do 10 seconds of jazz hands like you are summoning focus ✨",
+    "Do 6 slow knee lifts like you are stepping over laser beams 🔥",
+    "Stand, look at something far away for 5 seconds, then near for 5 seconds 👀",
+    "Do 5 gentle squats like you are compressing a spring for launch 🌀"
   ];
 
   // -----------------------------
@@ -552,8 +545,6 @@
     const s = sec % 60;
     el.timer.textContent = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
   }
-
-  function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
 
   function updateBars() {
     el.powerBar.style.width = (power / 5) * 100 + "%";
@@ -594,13 +585,10 @@
     el.hintBox.style.display = "none";
     el.hintBox.textContent = "";
 
-    const frontText = card?.front || "—";
-    const backText = card?.back || card?.answer || "—";
-    const displayText = showingBack ? backText : frontText;
+    const text = showingBack ? (card?.back || card?.answer || "—") : (card?.front || "—");
+    el.cardText.textContent = text;
 
-    el.cardText.textContent = displayText;
-
-    // Image: front_image on front, back_image on back
+    // image logic
     const imgUrl = showingBack ? (card?.imgBack || "") : (card?.imgFront || "");
     if (imgUrl) {
       el.cardImg.src = imgUrl;
@@ -613,12 +601,14 @@
       el.cardImg.alt = "";
     }
 
-    speak(displayText);
+    if (!showingBack && card?.front) speak(card.front);
+    if (showingBack && (card?.back || card?.answer)) speak(card.back || card.answer);
   }
 
   function setAnswerUI(card) {
     const mode = el.mode.value;
 
+    // Boss badge
     el.bossBadge.style.display = inBoss ? "inline-flex" : "none";
 
     if (mode === "self") {
@@ -627,14 +617,15 @@
       return;
     }
 
+    // Quiz mode
     el.answerArea.style.display = "grid";
     el.selfScoreRow.style.display = "none";
 
+    // Typed answer
     el.typedAnswer.value = "";
     el.typedAnswer.placeholder = "Type answer…";
-    el.typedAnswer.style.display = "inline-block";
-    el.submitAnswer.style.display = "inline-block";
 
+    // Choices
     el.choices.innerHTML = "";
     const choices = card?.choices || [];
     if (choices.length >= 2) {
@@ -674,6 +665,7 @@
   }
 
   function pickNextCardRef() {
+    // Boss mode pulls from missQueue first
     if (inBoss && missQueue.length) {
       return missQueue.shift();
     }
@@ -720,21 +712,6 @@
     setStatus();
   }
 
-  function flipCard() {
-    if (!current?.card) return;
-    showingBack = !showingBack;
-    const deck = decks[current.deckIndex];
-    setCardDisplay(current.card, deck?.name, inBoss ? "Boss: Answer this" : "Quest: Answer this");
-  }
-
-  function revealCard() {
-    if (!current?.card) return;
-    if (showingBack) return;
-    showingBack = true;
-    const deck = decks[current.deckIndex];
-    setCardDisplay(current.card, deck?.name, inBoss ? "Boss: Answer this" : "Quest: Answer this");
-  }
-
   // -----------------------------
   // Game loop
   // -----------------------------
@@ -743,6 +720,7 @@
       showModal("No deck loaded", "📄", "Load a TSV/CSV deck first.");
       return;
     }
+
     rebuildFilters();
 
     running = true;
@@ -750,13 +728,14 @@
     bossHP = 0;
     missQueue = [];
 
-    sprintSeconds = seconds;
     remaining = seconds;
+
     correct = 0;
     missed = 0;
     streak = 0;
     power = 0;
     freezeUntil = 0;
+    showingBack = false;
 
     setTimerDisplay(remaining);
     setStatus();
@@ -799,12 +778,12 @@
 
     const now = Date.now();
 
-    if (freezeUntil && now < freezeUntil) {
-      return;
-    }
+    // Freeze logic: timer does not decrease
+    if (freezeUntil && now < freezeUntil) return;
 
     if (!tick._acc) tick._acc = 0;
     tick._acc += 0.25;
+
     if (tick._acc >= 1.0) {
       tick._acc = 0;
       remaining = Math.max(0, remaining - 1);
@@ -831,18 +810,18 @@
   }
 
   function useHint() {
-    if (!current?.card) return;
+    if (!current || !current.card) return;
     if (!spendPower(1)) {
       showModal("Not enough power", "⚡", "Earn power by getting answers correct.");
       return;
     }
-    const h = current.card.hint || "No hint on this card. Add a hint column in your deck file for extra help.";
+    const h = current.card.hint || "No hint on this card. Add a hint column in the TSV/CSV for extra help.";
     el.hintBox.textContent = "Hint: " + h;
     el.hintBox.style.display = "block";
   }
 
   function useSkip() {
-    if (!current?.card) return;
+    if (!current || !current.card) return;
     if (!spendPower(1)) {
       showModal("Not enough power", "⚡", "Earn power by getting answers correct.");
       return;
@@ -863,6 +842,18 @@
   }
 
   // -----------------------------
+  // Reveal
+  // -----------------------------
+  function toggleReveal() {
+    if (!current || !current.card) return;
+    showingBack = !showingBack;
+
+    const deck = decks[current.deckIndex];
+    const label = showingBack ? "Answer revealed" : (inBoss ? "Boss: Answer this" : "Quest: Answer this");
+    setCardDisplay(current.card, deck.name, label);
+  }
+
+  // -----------------------------
   // Answer grading
   // -----------------------------
   function normalizeAnswer(s) {
@@ -873,7 +864,7 @@
   }
 
   function gradeAnswer(userAnswer) {
-    if (!current?.card) return;
+    if (!current || !current.card) return;
 
     const card = current.card;
     const expected = card.answer || card.back || "";
@@ -927,14 +918,13 @@
     const loot = loadLoot();
     loot[icon] = (loot[icon] || 0) + 1;
     localStorage.setItem(LS_KEY, JSON.stringify(loot));
-
     showModal("Loot drop", icon, `You earned <b>${icon}</b>.<br/>Total: <b>${loot[icon]}</b>`);
   }
 
   function loadLoot() {
     try {
       return JSON.parse(localStorage.getItem(LS_KEY) || "{}") || {};
-    } catch {
+    } catch (e) {
       return {};
     }
   }
@@ -949,14 +939,11 @@
   }
 
   // -----------------------------
-  // CSV/TSV to deck
+  // TSV/CSV -> deck
   // -----------------------------
   function deckFromCSVText(csvText, name) {
-    csvText = cleanText(csvText);
-
     const delim = detectDelimiter(csvText);
     const rows = parseDelimited(csvText, delim);
-
     if (!rows.length) return null;
 
     const header = rows[0].map(normalizeHeader);
@@ -986,7 +973,7 @@
         tag: header.indexOf("tag"),
         difficulty: header.indexOf("difficulty"),
         front_image: header.indexOf("front_image"),
-        back_image: header.indexOf("back_image"),
+        back_image: header.indexOf("back_image")
       };
     }
 
@@ -1025,7 +1012,6 @@
     }
 
     if (!cards.length) return null;
-
     return { name: name || "Deck", cards };
   }
 
@@ -1035,27 +1021,27 @@
   el.closeModal.addEventListener("click", closeModal);
   el.modal.addEventListener("click", (e) => { if (e.target === el.modal) closeModal(); });
 
-  el.contentArea.addEventListener("click", () => flipCard());
-  el.btnReveal.addEventListener("click", () => revealCard());
-
   el.file.addEventListener("change", async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
     for (const f of files) {
-      const text = cleanText(await f.text());
-      const d = deckFromCSVText(text, f.name.replace(/\.(csv|tsv)$/i, ""));
+      const text = await f.text();
+      const deckName = f.name.replace(/\.(csv|tsv)$/i, "");
+      const d = deckFromCSVText(text, deckName);
       if (d) decks.push(d);
     }
+
     rebuildFilters();
     setStatus();
     loadCurrent(pickNextCardRef());
   });
 
   el.loadPaste.addEventListener("click", () => {
-    const t = cleanText(el.csvPaste.value || "");
+    const t = el.csvPaste.value || "";
     const d = deckFromCSVText(t, "Pasted Deck");
     if (d) decks.push(d);
+
     rebuildFilters();
     setStatus();
     loadCurrent(pickNextCardRef());
@@ -1066,7 +1052,11 @@
     running = false;
     inBoss = false;
     missQueue = [];
-    correct = 0; missed = 0; streak = 0; power = 0;
+    correct = 0;
+    missed = 0;
+    streak = 0;
+    power = 0;
+    freezeUntil = 0;
     showingBack = false;
 
     if (tickHandle) clearInterval(tickHandle);
@@ -1085,37 +1075,39 @@
   });
 
   el.loadSample.addEventListener("click", () => {
-    // Sample is CSV on purpose; delimiter auto-detect handles it.
     const sample =
-`front,back,answer,choices,hint,tag,difficulty,front_image,back_image
-What is 7x8?,56,56,54|56|58|48,7x4=28 then double,math,2,,
-Capitol of Washington?,Olympia,Olympia,Seattle|Olympia|Tacoma|Spokane,It is not Seattle,geo,1,,
-Photosynthesis uses...,Sunlight to make food,Sunlight,Sunlight|Moonlight|Sound|Heat,Plants are solar powered,science,2,,
-Spell: necessary,necessary,necessary,,Double s,spelling,3,,
+`front\tback\tanswer\tchoices\thint\ttag\tdifficulty\tfront_image\tback_image
+What is 7x8?\t56\t56\t54|56|58|48\t7x4=28 then double\tmath\t2\t\t
+Capitol of Washington?\tOlympia\tOlympia\tSeattle|Olympia|Tacoma|Spokane\tIt is not Seattle\tgeo\t1\t\t
+Photosynthesis uses...\tSunlight to make food\tSunlight\tSunlight|Moonlight|Sound|Heat\tPlants are solar powered\tscience\t2\t\t
+Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
 `;
     el.csvPaste.value = sample;
     const d = deckFromCSVText(sample, "Sample Deck");
     if (d) decks.push(d);
+
     rebuildFilters();
     setStatus();
     loadCurrent(pickNextCardRef());
   });
 
+  // Settings change
   el.diff.addEventListener("change", () => { rebuildFilters(); loadCurrent(pickNextCardRef()); });
   el.wheel.addEventListener("change", () => { loadCurrent(pickNextCardRef()); });
-  el.mode.addEventListener("change", () => {
-    if (!current?.card) return;
-    setAnswerUI(current.card);
-  });
+  el.mode.addEventListener("change", () => { if (current && current.card) setAnswerUI(current.card); });
 
+  // Start buttons
   document.querySelectorAll("[data-sprint]").forEach(btn => {
     btn.addEventListener("click", () => startSprint(safeInt(btn.getAttribute("data-sprint"), 120)));
   });
   el.stop.addEventListener("click", () => { if (running) stopSprint(); });
 
+  // Reveal, self-score
+  el.btnReveal.addEventListener("click", toggleReveal);
   el.gotIt.addEventListener("click", () => { if (running) onCorrect(); });
   el.missedIt.addEventListener("click", () => { if (running) onMissed(); });
 
+  // Quiz submit
   function submitTyped() {
     if (!running) return;
     const v = el.typedAnswer.value || "";
@@ -1130,22 +1122,22 @@ Spell: necessary,necessary,necessary,,Double s,spelling,3,,
     if (e.key === "Enter") submitTyped();
   });
 
+  // Power-ups
   el.btnHint.addEventListener("click", useHint);
   el.btnSkip.addEventListener("click", useSkip);
   el.btnFreeze.addEventListener("click", useFreeze);
 
+  // Keyboard shortcuts (avoid when typing)
   window.addEventListener("keydown", (e) => {
     const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
     if (tag === "input" || tag === "textarea" || tag === "select") return;
 
-    const k = e.key.toLowerCase();
-    if (k === "h") { e.preventDefault(); useHint(); }
-    if (k === "s") { e.preventDefault(); useSkip(); }
-    if (k === "r") { e.preventDefault(); revealCard(); }
-    if (k === "f") { e.preventDefault(); flipCard(); }
+    if (e.key.toLowerCase() === "h") { e.preventDefault(); useHint(); }
+    if (e.key.toLowerCase() === "s") { e.preventDefault(); useSkip(); }
+    if (e.key.toLowerCase() === "r") { e.preventDefault(); toggleReveal(); }
   });
 
-  // Initial
+  // Init
   setTimerDisplay(0);
   setStatus();
   updateCounter();
