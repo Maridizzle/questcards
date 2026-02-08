@@ -201,7 +201,6 @@
       <div class="sub">Short quests, power-ups, boss battles. No accounts. Nothing leaves the browser.</div>
 
       <div class="grid">
-        <!-- LEFT: Setup -->
         <div class="panel">
           <div class="label">Load decks (TSV or CSV)</div>
           <div class="row">
@@ -213,9 +212,9 @@
           <div class="hr"></div>
 
           <div class="label">Optional: paste TSV/CSV</div>
-          <textarea id="csvPaste" placeholder="front	back	answer	choices	hint	tag	difficulty	front_image	back_image&#10;2+2	4	4	3|4|5|6	Think pairs	math	1		"></textarea>
+          <textarea id="csvPaste" placeholder="front\tback\tanswer\tchoices\thint\ttag\tdifficulty\tfront_image\tback_image&#10;2+2\t4\t4\t3|4|5|6\tThink pairs\tmath\t1\t\t"></textarea>
           <div class="row" style="margin-top:10px;">
-            <button class="btn secondary" id="loadPaste">Load pasted</button>
+            <button class="btn secondary" id="loadPaste">Load pasted deck</button>
           </div>
 
           <div class="hr"></div>
@@ -234,7 +233,7 @@
               <input id="audio" type="checkbox" /> Audio read-out
             </label>
             <label class="pill" style="display:inline-flex; gap:8px; align-items:center;">
-              <input id="movement" type="checkbox" /> Movement prompts
+              <input id="movement" type="checkbox" checked /> Movement prompts
             </label>
           </div>
 
@@ -272,7 +271,6 @@
           </div>
         </div>
 
-        <!-- RIGHT: Game -->
         <div class="flashcard">
           <div class="topbar">
             <div class="bars">
@@ -313,7 +311,7 @@
 
           <div class="footer">
             <div class="row">
-              <button class="btn secondary" id="btnReveal">Reveal 👁️</button>
+              <button class="btn secondary" id="btnReveal">Reveal answer 👁️</button>
               <button class="btn secondary" id="btnHint">Hint (cost 1 power)</button>
               <button class="btn secondary" id="btnSkip">Skip (cost 1 power)</button>
               <button class="btn secondary" id="btnFreeze">Freeze 10s (cost 2 power)</button>
@@ -333,7 +331,6 @@
     </div>
   </div>
 
-  <!-- Modal -->
   <div class="modal" id="modal">
     <div class="modalInner">
       <h2 class="modalTitle" id="modalTitle">Loot drop</h2>
@@ -347,41 +344,17 @@
 
 <script>
   // -----------------------------
-  // Utility helpers
-  // -----------------------------
-  function safeInt(v, fallback) {
-    const n = parseInt(String(v || "").trim(), 10);
-    return Number.isFinite(n) ? n : fallback;
-  }
-
-  function normalizeHeader(s) {
-    return String(s || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "_")
-      .replace(/[^a-z0-9_]/g, "");
-  }
-
-  function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
-
-  // -----------------------------
-  // Delimiter detection + parsing
+  // CSV/TSV parsing
   // -----------------------------
   function detectDelimiter(text) {
-    const firstLine = text
-      .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n")
-      .split("\n")
-      .find(l => l.trim().length > 0) || "";
-
+    const firstLine = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+      .split("\n").find(l => l.trim().length > 0) || "";
     const commas = (firstLine.match(/,/g) || []).length;
     const tabs = (firstLine.match(/\t/g) || []).length;
-
     if (tabs > 0 && tabs >= commas) return "\t";
     return ",";
   }
 
-  // Delimiter-aware parser supporting quotes/newlines
   function parseDelimited(text, delimiter) {
     const rows = [];
     let row = [];
@@ -422,8 +395,17 @@
     return rows;
   }
 
+  function safeInt(v, fallback) {
+    const n = parseInt(String(v || "").trim(), 10);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function normalizeHeader(h) {
+    return String(h || "").trim().toLowerCase().replace(/\s+/g, "_");
+  }
+
   // -----------------------------
-  // State + DOM
+  // State
   // -----------------------------
   const el = {
     file: document.getElementById("file"),
@@ -450,6 +432,7 @@
     cardText: document.getElementById("cardText"),
     cardImg: document.getElementById("cardImg"),
     hintBox: document.getElementById("hintBox"),
+    contentArea: document.getElementById("contentArea"),
 
     answerArea: document.getElementById("answerArea"),
     typedAnswer: document.getElementById("typedAnswer"),
@@ -467,6 +450,7 @@
 
     gotIt: document.getElementById("gotIt"),
     missedIt: document.getElementById("missedIt"),
+
     stop: document.getElementById("stop"),
 
     modal: document.getElementById("modal"),
@@ -479,62 +463,57 @@
   // decks = [{ name, cards: [{front,back,answer,choices[],hint,tag,difficulty,imgFront,imgBack}] }]
   let decks = [];
   let running = false;
+  let sprintSeconds = 0;
   let remaining = 0;
   let tickHandle = null;
 
   let current = null; // { deckIndex, cardIndex, card }
   let filteredIndexByDeck = [];
 
-  // Session stats
   let correct = 0;
   let missed = 0;
   let streak = 0;
   let power = 0; // max 5
 
-  // Boss system
   let missQueue = [];
   let inBoss = false;
   let bossHP = 0;
 
-  // Freeze timer
   let freezeUntil = 0;
 
-  // Reveal state
   let showingBack = false;
 
-  // Local storage
   const LS_KEY = "questcards_loot_v1";
   const LS_BEST = "questcards_best_v1";
 
   const LOOT = ["✨", "🧿", "🦊", "🐉", "🦄", "🪐", "🧠", "⚡", "🧩", "🗝️", "🌙", "🦇", "🕯️", "🎧", "📚"];
 
-  // 25 movement prompts
   const MOVES = [
     "Stand up and stretch your arms like you are charging solar panels ☀️",
-    "Do 5 wall pushes. Yes, like a hero in training 🦸",
+    "Do 5 wall pushes. Hero training time 🦸",
     "Spin once like a confused satellite 🪐",
-    "Touch a doorway, come back, and breathe once slow 🌬️",
+    "Touch a doorway, come back, and take one slow breath 🌬️",
     "Shake out your hands and shoulders like a cat resetting its soul 🐈",
-    "Do 10 marching steps in place like you are leading an expedition 🥾",
-    "Roll your shoulders 6 times like you are shrugging off a villain monologue 😈",
-    "Stand tall and do 3 slow deep breaths like a lighthouse in a storm 🌊",
-    "Do 5 calf raises like you are powering up rocket boosters 🚀",
-    "Do a gentle forward fold for 10 seconds like you are downloading calm 🧘",
-    "Do 8 toe taps on each foot like you are entering a cheat code 🎮",
-    "Reach up, then touch your toes, repeat 4 times like a stretchy noodle 🧬",
-    "Do 5 big arm circles like you are stirring a cosmic soup 🥣",
-    "Take 12 steps and count them out loud like a scientist verifying data 🔬",
-    "Do 5 slow neck tilts (each side) like you are scanning for clues 🕵️",
-    "Stand on one foot for 10 seconds like a flamingo judge 🦩",
-    "Do 6 gentle twists side-to-side like you are wringing out stress 🧽",
-    "Shake your legs out for 8 seconds like you are rebooting your OS 💻",
-    "Do 5 “air punches” slowly like you are fighting procrastination 🥊",
-    "Pretend you are opening a giant door: pull back 6 times 🚪",
-    "Walk to get water (or fake it) like you are on a secret mission 🥤",
-    "Do 10 seconds of jazz hands like you are summoning focus ✨",
-    "Do 6 slow knee lifts like you are stepping over laser beams 🔥",
-    "Stand, look at something far away for 5 seconds, then near for 5 seconds 👀",
-    "Do 5 gentle squats like you are compressing a spring for launch 🌀"
+    "March in place for 10 seconds like you are summoning focus ⚡",
+    "Do 5 slow shoulder rolls forward and 5 back 🌀",
+    "Stand and do 8 calf raises like you are leveling up 🧠",
+    "Look at something far away, then near, 5 times 👀",
+    "Do a gentle neck stretch left and right (no pain) 🌿",
+    "Do 10 seconds of “star pose” like a dramatic wizard ⭐",
+    "Walk to the kitchen and back like a stealth mission 🕵️",
+    "Do 5 deep belly breaths like you are rebooting 🔄",
+    "Stretch your fingers wide, then make fists, 10 times ✋",
+    "Stand tall and do 3 proud posture resets like royalty 👑",
+    "Do 10 seconds of tiny dance moves. Yes. Tiny. 🕺",
+    "Tap your feet in a rhythm for 10 seconds like a drummer 🥁",
+    "Do 6 slow arm circles, then reverse 🔁",
+    "Do 5 gentle squats (or chair squats) like a boss battle 🐉",
+    "Shake your legs out like you are deleting extra brain tabs 🧼",
+    "Do a quick room scan and name 3 objects you see 👁️",
+    "Stand and stretch your side body left and right like a reed 🌾",
+    "Do 10 seconds of “pretend you are pulling a rope” 🪢",
+    "Roll your wrists like you are warming up spellcasting ✨",
+    "Do 5 slow toe touches (or reach toward knees) 🧘"
   ];
 
   // -----------------------------
@@ -545,6 +524,8 @@
     const s = sec % 60;
     el.timer.textContent = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
   }
+
+  function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
 
   function updateBars() {
     el.powerBar.style.width = (power / 5) * 100 + "%";
@@ -579,17 +560,20 @@
     window.speechSynthesis.speak(utter);
   }
 
+  function cardFrontText(card) { return card?.front || "—"; }
+  function cardBackText(card) { return card?.back || card?.answer || "—"; }
+
   function setCardDisplay(card, deckName, label) {
     el.deckName.textContent = deckName || "—";
     el.faceLabel.textContent = label || "Quest";
     el.hintBox.style.display = "none";
     el.hintBox.textContent = "";
 
-    const text = showingBack ? (card?.back || card?.answer || "—") : (card?.front || "—");
+    const text = showingBack ? cardBackText(card) : cardFrontText(card);
     el.cardText.textContent = text;
 
-    // image logic
-    const imgUrl = showingBack ? (card?.imgBack || "") : (card?.imgFront || "");
+    // Image: front on front, back on back, fall back to whichever exists
+    const imgUrl = showingBack ? (card?.imgBack || card?.imgFront || "") : (card?.imgFront || "");
     if (imgUrl) {
       el.cardImg.src = imgUrl;
       el.cardImg.alt = "card image";
@@ -602,13 +586,12 @@
     }
 
     if (!showingBack && card?.front) speak(card.front);
-    if (showingBack && (card?.back || card?.answer)) speak(card.back || card.answer);
+    if (showingBack && (card?.back || card?.answer)) speak(card?.back || card?.answer);
   }
 
   function setAnswerUI(card) {
     const mode = el.mode.value;
 
-    // Boss badge
     el.bossBadge.style.display = inBoss ? "inline-flex" : "none";
 
     if (mode === "self") {
@@ -617,15 +600,14 @@
       return;
     }
 
-    // Quiz mode
     el.answerArea.style.display = "grid";
     el.selfScoreRow.style.display = "none";
 
-    // Typed answer
     el.typedAnswer.value = "";
     el.typedAnswer.placeholder = "Type answer…";
+    el.typedAnswer.style.display = "inline-block";
+    el.submitAnswer.style.display = "inline-block";
 
-    // Choices
     el.choices.innerHTML = "";
     const choices = card?.choices || [];
     if (choices.length >= 2) {
@@ -665,10 +647,7 @@
   }
 
   function pickNextCardRef() {
-    // Boss mode pulls from missQueue first
-    if (inBoss && missQueue.length) {
-      return missQueue.shift();
-    }
+    if (inBoss && missQueue.length) return missQueue.shift();
 
     if (!decks.length) return null;
 
@@ -693,10 +672,11 @@
 
   function loadCurrent(ref) {
     showingBack = false;
+    el.btnReveal.textContent = "Reveal answer 👁️";
 
     if (!ref) {
       current = null;
-      el.cardText.textContent = "No cards match the current difficulty filter.";
+      el.cardText.textContent = decks.length ? "No cards match the current difficulty filter." : "Load a deck and start a sprint.";
       el.deckName.textContent = "—";
       el.faceLabel.textContent = "Idle";
       el.cardImg.style.display = "none";
@@ -720,7 +700,6 @@
       showModal("No deck loaded", "📄", "Load a TSV/CSV deck first.");
       return;
     }
-
     rebuildFilters();
 
     running = true;
@@ -728,14 +707,13 @@
     bossHP = 0;
     missQueue = [];
 
+    sprintSeconds = seconds;
     remaining = seconds;
-
     correct = 0;
     missed = 0;
     streak = 0;
     power = 0;
     freezeUntil = 0;
-    showingBack = false;
 
     setTimerDisplay(remaining);
     setStatus();
@@ -764,6 +742,7 @@
     const score = correct;
 
     if (score > prevBest) localStorage.setItem(bestKey, String(score));
+
     const bestNow = safeInt(localStorage.getItem(bestKey) || "0", 0);
 
     showModal(
@@ -777,13 +756,10 @@
     if (!running) return;
 
     const now = Date.now();
-
-    // Freeze logic: timer does not decrease
     if (freezeUntil && now < freezeUntil) return;
 
     if (!tick._acc) tick._acc = 0;
     tick._acc += 0.25;
-
     if (tick._acc >= 1.0) {
       tick._acc = 0;
       remaining = Math.max(0, remaining - 1);
@@ -810,7 +786,7 @@
   }
 
   function useHint() {
-    if (!current || !current.card) return;
+    if (!current?.card) return;
     if (!spendPower(1)) {
       showModal("Not enough power", "⚡", "Earn power by getting answers correct.");
       return;
@@ -821,7 +797,7 @@
   }
 
   function useSkip() {
-    if (!current || !current.card) return;
+    if (!current?.card) return;
     if (!spendPower(1)) {
       showModal("Not enough power", "⚡", "Earn power by getting answers correct.");
       return;
@@ -842,36 +818,35 @@
   }
 
   // -----------------------------
-  // Reveal
+  // Reveal / flip
   // -----------------------------
   function toggleReveal() {
-    if (!current || !current.card) return;
+    if (!current?.card) return;
     showingBack = !showingBack;
-
+    el.btnReveal.textContent = showingBack ? "Hide answer 🙈" : "Reveal answer 👁️";
     const deck = decks[current.deckIndex];
-    const label = showingBack ? "Answer revealed" : (inBoss ? "Boss: Answer this" : "Quest: Answer this");
-    setCardDisplay(current.card, deck.name, label);
+    setCardDisplay(current.card, deck?.name, inBoss ? "Boss: Answer this" : "Quest: Answer this");
   }
 
   // -----------------------------
   // Answer grading
   // -----------------------------
   function normalizeAnswer(s) {
-    return String(s || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, " ");
+    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
   }
 
   function gradeAnswer(userAnswer) {
-    if (!current || !current.card) return;
+    if (!current?.card) return;
 
     const card = current.card;
     const expected = card.answer || card.back || "";
     const ok = normalizeAnswer(userAnswer) === normalizeAnswer(expected);
 
     if (ok) onCorrect();
-    else onMissed();
+    else {
+      onMissed();
+      showModal("Not quite", "🧩", `Correct answer: <b>${expected || "—"}</b>`);
+    }
 
     el.typedAnswer.value = "";
   }
@@ -922,11 +897,8 @@
   }
 
   function loadLoot() {
-    try {
-      return JSON.parse(localStorage.getItem(LS_KEY) || "{}") || {};
-    } catch (e) {
-      return {};
-    }
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}") || {}; }
+    catch { return {}; }
   }
 
   function maybeMovementPrompt() {
@@ -939,15 +911,15 @@
   }
 
   // -----------------------------
-  // TSV/CSV -> deck
+  // TSV/CSV to deck
   // -----------------------------
-  function deckFromCSVText(csvText, name) {
-    const delim = detectDelimiter(csvText);
-    const rows = parseDelimited(csvText, delim);
+  function deckFromText(text, name) {
+    const delim = detectDelimiter(text);
+    const rows = parseDelimited(text, delim);
     if (!rows.length) return null;
 
     const header = rows[0].map(normalizeHeader);
-    const hasHeader = header.includes("front") && header.includes("back");
+    const hasHeader = header.includes("front") && (header.includes("back") || header.includes("answer"));
 
     let startRow = 0;
     let col = {
@@ -983,7 +955,7 @@
       const row = rows[r];
 
       const front = (row[col.front] ?? "").trim();
-      const back = (row[col.back] ?? "").trim();
+      const back = col.back >= 0 ? (row[col.back] ?? "").trim() : "";
       const answer = col.answer >= 0 ? (row[col.answer] ?? "").trim() : "";
       const choicesRaw = col.choices >= 0 ? (row[col.choices] ?? "").trim() : "";
       const hint = col.hint >= 0 ? (row[col.hint] ?? "").trim() : "";
@@ -992,7 +964,7 @@
       const imgFront = col.front_image >= 0 ? (row[col.front_image] ?? "").trim() : "";
       const imgBack = col.back_image >= 0 ? (row[col.back_image] ?? "").trim() : "";
 
-      if (!front && !back && !imgFront && !imgBack) continue;
+      if (!front && !back && !answer && !imgFront && !imgBack) continue;
 
       let choices = [];
       if (choicesRaw) choices = choicesRaw.split("|").map(s => s.trim()).filter(Boolean);
@@ -1000,7 +972,8 @@
       const finalAnswer = answer || back;
 
       cards.push({
-        front, back,
+        front,
+        back: back || finalAnswer,
         answer: finalAnswer,
         choices,
         hint,
@@ -1027,11 +1000,9 @@
 
     for (const f of files) {
       const text = await f.text();
-      const deckName = f.name.replace(/\.(csv|tsv)$/i, "");
-      const d = deckFromCSVText(text, deckName);
+      const d = deckFromText(text, f.name.replace(/\.(csv|tsv)$/i, ""));
       if (d) decks.push(d);
     }
-
     rebuildFilters();
     setStatus();
     loadCurrent(pickNextCardRef());
@@ -1039,9 +1010,8 @@
 
   el.loadPaste.addEventListener("click", () => {
     const t = el.csvPaste.value || "";
-    const d = deckFromCSVText(t, "Pasted Deck");
+    const d = deckFromText(t, "Pasted Deck");
     if (d) decks.push(d);
-
     rebuildFilters();
     setStatus();
     loadCurrent(pickNextCardRef());
@@ -1052,11 +1022,7 @@
     running = false;
     inBoss = false;
     missQueue = [];
-    correct = 0;
-    missed = 0;
-    streak = 0;
-    power = 0;
-    freezeUntil = 0;
+    correct = 0; missed = 0; streak = 0; power = 0;
     showingBack = false;
 
     if (tickHandle) clearInterval(tickHandle);
@@ -1065,13 +1031,13 @@
     el.file.value = "";
     setTimerDisplay(0);
     setStatus();
-
     el.cardText.textContent = "Load a deck and start a sprint.";
     el.deckName.textContent = "—";
     el.faceLabel.textContent = "Ready";
     el.cardImg.style.display = "none";
     el.answerArea.style.display = "none";
     el.selfScoreRow.style.display = "flex";
+    el.btnReveal.textContent = "Reveal answer 👁️";
   });
 
   el.loadSample.addEventListener("click", () => {
@@ -1083,31 +1049,25 @@ Photosynthesis uses...\tSunlight to make food\tSunlight\tSunlight|Moonlight|Soun
 Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
 `;
     el.csvPaste.value = sample;
-    const d = deckFromCSVText(sample, "Sample Deck");
+    const d = deckFromText(sample, "Sample Deck");
     if (d) decks.push(d);
-
     rebuildFilters();
     setStatus();
     loadCurrent(pickNextCardRef());
   });
 
-  // Settings change
   el.diff.addEventListener("change", () => { rebuildFilters(); loadCurrent(pickNextCardRef()); });
   el.wheel.addEventListener("change", () => { loadCurrent(pickNextCardRef()); });
-  el.mode.addEventListener("change", () => { if (current && current.card) setAnswerUI(current.card); });
+  el.mode.addEventListener("change", () => { if (current?.card) setAnswerUI(current.card); });
 
-  // Start buttons
   document.querySelectorAll("[data-sprint]").forEach(btn => {
     btn.addEventListener("click", () => startSprint(safeInt(btn.getAttribute("data-sprint"), 120)));
   });
   el.stop.addEventListener("click", () => { if (running) stopSprint(); });
 
-  // Reveal, self-score
-  el.btnReveal.addEventListener("click", toggleReveal);
   el.gotIt.addEventListener("click", () => { if (running) onCorrect(); });
   el.missedIt.addEventListener("click", () => { if (running) onMissed(); });
 
-  // Quiz submit
   function submitTyped() {
     if (!running) return;
     const v = el.typedAnswer.value || "";
@@ -1118,26 +1078,23 @@ Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
     gradeAnswer(v);
   }
   el.submitAnswer.addEventListener("click", submitTyped);
-  el.typedAnswer.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submitTyped();
-  });
+  el.typedAnswer.addEventListener("keydown", (e) => { if (e.key === "Enter") submitTyped(); });
 
-  // Power-ups
+  el.btnReveal.addEventListener("click", toggleReveal);
   el.btnHint.addEventListener("click", useHint);
   el.btnSkip.addEventListener("click", useSkip);
   el.btnFreeze.addEventListener("click", useFreeze);
 
-  // Keyboard shortcuts (avoid when typing)
   window.addEventListener("keydown", (e) => {
     const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
     if (tag === "input" || tag === "textarea" || tag === "select") return;
 
-    if (e.key.toLowerCase() === "h") { e.preventDefault(); useHint(); }
-    if (e.key.toLowerCase() === "s") { e.preventDefault(); useSkip(); }
-    if (e.key.toLowerCase() === "r") { e.preventDefault(); toggleReveal(); }
+    const k = e.key.toLowerCase();
+    if (k === "h") { e.preventDefault(); useHint(); }
+    if (k === "s") { e.preventDefault(); useSkip(); }
+    if (k === "r") { e.preventDefault(); toggleReveal(); }
   });
 
-  // Init
   setTimerDisplay(0);
   setStatus();
   updateCounter();
