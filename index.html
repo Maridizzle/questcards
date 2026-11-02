@@ -192,6 +192,25 @@
       color: #ffd1d1;
       font-size: 12px;
     }
+
+    /* Kid modes (Stage 2: functional layout only, theme comes in Stage 3) */
+    .kidOnly { display: none; }
+    body.kid .kidOnly { display: inline-block; }
+    body.kid .footer { display: none; }
+    body.kid .barWrap, body.kid #timer { display: none; }
+    body.kid .panel.collapsed { display: none; }
+    @media (min-width: 960px) { .grid.solo { grid-template-columns: 1fr; } }
+    .grid.solo { grid-template-columns: 1fr; }
+    .visual { font-size: clamp(32px, 6vw, 56px); line-height: 1.4; margin-top: 10px; word-break: break-word; }
+    .visual.letter { font-size: clamp(72px, 16vw, 140px); font-weight: 700; }
+    body.kid .bigText { font-size: clamp(24px, 5vw, 44px); }
+    body.kid .choices { grid-template-columns: repeat(2, 1fr); max-width: 640px; }
+    body.kid .choiceBtn { text-align: center; font-size: clamp(28px, 6vw, 48px); padding: 20px 12px; min-height: 84px; border-radius: 20px; }
+    .choiceBtn.right { background: #1f6a44; outline: 3px solid #7dffb0; }
+    .choiceBtn.wrong { background: #3a2a44; opacity: .45; animation: nudge .35s; }
+    @keyframes nudge { 0%,100% { transform: translateX(0); } 30% { transform: translateX(-6px); } 70% { transform: translateX(6px); } }
+    @media (prefers-reduced-motion: reduce) { .choiceBtn.wrong { animation: none; } }
+    .bigPlay { font-size: 32px; padding: 18px 36px; border-radius: 24px; }
   </style>
 </head>
 <body>
@@ -199,9 +218,23 @@
     <div class="card">
       <h1>QuestCards 🃏⚡</h1>
       <div class="sub">Short quests, power-ups, boss battles. No accounts. Nothing leaves the browser.</div>
+      <div class="row" style="margin-bottom:10px;">
+        <button class="btn secondary kidOnly" id="toggleAdult">👪 Grown-ups</button>
+      </div>
 
-      <div class="grid">
-        <div class="panel">
+      <div class="grid" id="mainGrid">
+        <div class="panel" id="setupPanel">
+          <div class="label">Play style</div>
+          <div class="row">
+            <select id="playStyle">
+              <option value="classic">Classic (your own decks)</option>
+              <option value="kreading">Kindergarten Reading</option>
+              <option value="g1math">1st Grade Math</option>
+            </select>
+          </div>
+
+          <div class="hr"></div>
+
           <div class="label">Load decks (TSV or CSV)</div>
           <div class="row">
             <input id="file" type="file" accept=".tsv,text/tab-separated-values,.csv,text/csv" multiple />
@@ -255,6 +288,14 @@
 
           <div class="hr"></div>
 
+          <div class="label">Parent companion</div>
+          <div class="row">
+            <select id="skillSel"></select>
+            <button class="btn secondary" id="teachMe">Teach me</button>
+          </div>
+
+          <div class="hr"></div>
+
           <div class="label">Start a sprint</div>
           <div class="row">
             <button class="btn good" data-sprint="120">2 min</button>
@@ -296,13 +337,18 @@
           <div class="content" id="contentArea">
             <div>
               <div class="bigText" id="cardText">Load a deck and start a sprint.</div>
+              <div class="visual" id="cardVisual"></div>
+              <div style="margin-top:12px;">
+                <button class="btn kidOnly" id="hearIt" style="display:none;">🔊 Hear it</button>
+                <button class="btn good bigPlay kidOnly" id="kidPlay" style="display:none;">▶ Play</button>
+              </div>
               <img class="img" id="cardImg" alt="" />
               <div class="hintBox" id="hintBox"></div>
             </div>
           </div>
 
           <div class="answerArea" id="answerArea" style="display:none;">
-            <div class="row" style="justify-content:center;">
+            <div class="row" id="typedRow" style="justify-content:center;">
               <input id="typedAnswer" type="text" placeholder="Type answer…" style="width:min(520px,92vw);" />
               <button class="btn" id="submitAnswer">Submit</button>
             </div>
@@ -458,6 +504,17 @@
     lootIcon: document.getElementById("lootIcon"),
     modalBody: document.getElementById("modalBody"),
     closeModal: document.getElementById("closeModal"),
+
+    playStyle: document.getElementById("playStyle"),
+    mainGrid: document.getElementById("mainGrid"),
+    setupPanel: document.getElementById("setupPanel"),
+    toggleAdult: document.getElementById("toggleAdult"),
+    cardVisual: document.getElementById("cardVisual"),
+    hearIt: document.getElementById("hearIt"),
+    kidPlay: document.getElementById("kidPlay"),
+    typedRow: document.getElementById("typedRow"),
+    skillSel: document.getElementById("skillSel"),
+    teachMe: document.getElementById("teachMe"),
   };
 
   // decks = [{ name, cards: [{front,back,answer,choices[],hint,tag,difficulty,imgFront,imgBack}] }]
@@ -482,6 +539,12 @@
   let freezeUntil = 0;
 
   let showingBack = false;
+
+  let kidMode = false;
+  let kidCount = 0;
+  let kidTries = 0;
+  let kidLock = false;
+  const KID_ROUND = 10;
 
   const LS_KEY = "questcards_loot_v1";
   const LS_BEST = "questcards_best_v1";
@@ -550,8 +613,8 @@
     el.modal.style.display = "none";
   }
 
-  function speak(text) {
-    if (!el.audio.checked) return;
+  function speak(text, force) {
+    if (!force && !el.audio.checked) return;
     if (!("speechSynthesis" in window)) return;
     const utter = new SpeechSynthesisUtterance(text);
     utter.rate = 1.0;
@@ -571,6 +634,8 @@
 
     const text = showingBack ? cardBackText(card) : cardFrontText(card);
     el.cardText.textContent = text;
+    el.cardVisual.textContent = (!showingBack && card?.visual) ? card.visual : "";
+    el.cardVisual.classList.toggle("letter", card?.skill === "letters");
 
     // Image: front on front, back on back, fall back to whichever exists
     const imgUrl = showingBack ? (card?.imgBack || card?.imgFront || "") : (card?.imgFront || "");
@@ -585,7 +650,8 @@
       el.cardImg.alt = "";
     }
 
-    if (!showingBack && card?.front) speak(card.front);
+    const spoken = card?.speak || card?.front;
+    if (!showingBack && spoken) speak(spoken);
     if (showingBack && (card?.back || card?.answer)) speak(card?.back || card?.answer);
   }
 
@@ -593,6 +659,22 @@
     const mode = el.mode.value;
 
     el.bossBadge.style.display = inBoss ? "inline-flex" : "none";
+
+    if (kidMode) {
+      el.answerArea.style.display = "grid";
+      el.selfScoreRow.style.display = "none";
+      el.typedRow.style.display = "none";
+      el.choices.innerHTML = "";
+      for (const c of (card?.choices || [])) {
+        const b = document.createElement("button");
+        b.className = "btn secondary choiceBtn";
+        b.textContent = c;
+        b.onclick = () => kidChoose(b, c);
+        el.choices.appendChild(b);
+      }
+      return;
+    }
+    el.typedRow.style.display = "";
 
     if (mode === "self") {
       el.answerArea.style.display = "none";
@@ -647,6 +729,7 @@
   }
 
   function pickNextCardRef() {
+    if (kidMode) return { deckIndex: -1, cardIndex: -1, gen: true };
     if (inBoss && missQueue.length) return missQueue.shift();
 
     if (!decks.length) return null;
@@ -671,6 +754,7 @@
   }
 
   function loadCurrent(ref) {
+    if (kidMode && !running) { refreshKidUI(); return; }
     showingBack = false;
     el.btnReveal.textContent = "Reveal answer 👁️";
 
@@ -680,6 +764,18 @@
       el.deckName.textContent = "—";
       el.faceLabel.textContent = "Idle";
       el.cardImg.style.display = "none";
+      return;
+    }
+
+    if (ref.gen) {
+      const gcard = generateKidCard();
+      current = { ...ref, card: gcard };
+      kidTries = 0;
+      kidLock = false;
+      el.cardCounter.textContent = `${Math.min(kidCount + 1, KID_ROUND)} / ${KID_ROUND}`;
+      setCardDisplay(gcard, STYLE_NAMES[el.playStyle.value], "Let's play");
+      setAnswerUI(gcard);
+      setStatus();
       return;
     }
 
@@ -696,6 +792,7 @@
   // Game loop
   // -----------------------------
   function startSprint(seconds) {
+    if (kidMode) { startKid(); return; }
     if (!decks.length) {
       showModal("No deck loaded", "📄", "Load a TSV/CSV deck first.");
       return;
@@ -786,6 +883,7 @@
   }
 
   function useHint() {
+    if (!running) return;
     if (!current?.card) return;
     if (!spendPower(1)) {
       showModal("Not enough power", "⚡", "Earn power by getting answers correct.");
@@ -797,6 +895,7 @@
   }
 
   function useSkip() {
+    if (!running) return;
     if (!current?.card) return;
     if (!spendPower(1)) {
       showModal("Not enough power", "⚡", "Earn power by getting answers correct.");
@@ -815,6 +914,242 @@
     }
     freezeUntil = Date.now() + 10000;
     showModal("Timer frozen", "🧊", "You have 10 seconds where time does not move. Use it like a wizard.");
+  }
+
+  // -----------------------------
+  // Kid modes: generators and handlers
+  // -----------------------------
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  }
+
+  const STYLE_NAMES = { kreading: "Kindergarten Reading", g1math: "1st Grade Math" };
+
+  const SKILLS = {
+    kreading: [
+      { id: "letters", title: "Matching capital and lowercase letters" },
+      { id: "words", title: "Reading simple words" }
+    ],
+    g1math: [
+      { id: "counting", title: "Counting objects" },
+      { id: "add", title: "Adding" },
+      { id: "sub", title: "Subtracting" },
+      { id: "missing", title: "Finding the missing number" }
+    ]
+  };
+
+  const WORDS = [
+    ["cat", "🐱"], ["dog", "🐶"], ["sun", "☀️"], ["bus", "🚌"], ["hat", "🎩"],
+    ["pig", "🐷"], ["bed", "🛏️"], ["fox", "🦊"], ["bug", "🐛"], ["hen", "🐔"],
+    ["map", "🗺️"], ["car", "🚗"], ["bat", "🦇"], ["fish", "🐟"], ["star", "⭐"],
+    ["tree", "🌳"], ["book", "📖"], ["moon", "🌙"]
+  ];
+  const ALPHA = "abcdefghijklmnopqrstuvwxyz".split("");
+  const CONFUSABLE = [["b", "d", "p", "q"], ["m", "n", "w", "u"], ["a", "e", "o", "c"]];
+
+  function rnd(n) { return Math.floor(Math.random() * n); }
+  function pick(a) { return a[rnd(a.length)]; }
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+  function kidLevel() {
+    const d = el.diff.value;
+    return d === "all" ? 1 + rnd(3) : safeInt(d, 1);
+  }
+  function dots(n) {
+    let s = "";
+    for (let i = 1; i <= n; i++) { s += "🍎"; if (i % 5 === 0 && i < n) s += " "; }
+    return s;
+  }
+  function numChoices(ans, max) {
+    const set = new Set([ans]);
+    const near = shuffle([ans - 3, ans - 2, ans - 1, ans + 1, ans + 2, ans + 3].filter(n => n >= 0 && n <= max));
+    for (const n of near) { if (set.size >= 4) break; set.add(n); }
+    for (let n = 0; set.size < 4; n++) set.add(n);
+    return shuffle([...set].map(String));
+  }
+
+  function genMath() {
+    const lvl = kidLevel();
+    const max = lvl === 1 ? 10 : 20;
+    const kind = pick(lvl === 1 ? ["count", "add", "sub"] : lvl === 2 ? ["add", "sub"] : ["missing", "add", "sub"]);
+    if (kind === "count") {
+      const n = 1 + rnd(10);
+      return { skill: "counting", front: "How many?", visual: dots(n), speak: "How many apples do you see?", answer: String(n), choices: numChoices(n, 12) };
+    }
+    if (kind === "add") {
+      const total = 2 + rnd(max - 1);
+      const a = 1 + rnd(total - 1);
+      const b = total - a;
+      return { skill: "add", front: `${a} + ${b} = ?`, visual: lvl === 1 ? `${dots(a)} ➕ ${dots(b)}` : "", speak: `${a} plus ${b}. What is the answer?`, answer: String(total), choices: numChoices(total, max) };
+    }
+    if (kind === "sub") {
+      const a = 2 + rnd(max - 1);
+      const b = 1 + rnd(a - 1);
+      return { skill: "sub", front: `${a} − ${b} = ?`, visual: lvl === 1 ? `${dots(a)}  take away ${b}` : "", speak: `${a} minus ${b}. What is the answer?`, answer: String(a - b), choices: numChoices(a - b, max) };
+    }
+    const total = 3 + rnd(max - 2);
+    const a = 1 + rnd(total - 1);
+    return { skill: "missing", front: `${a} + ? = ${total}`, visual: "", speak: `${a} plus what number makes ${total}?`, answer: String(total - a), choices: numChoices(total - a, max) };
+  }
+
+  function genReading() {
+    if (Math.random() < 0.5) {
+      const L = pick(ALPHA);
+      const group = CONFUSABLE.find(g => g.includes(L));
+      const others = group
+        ? group.filter(x => x !== L)
+        : shuffle(ALPHA.filter(x => x !== L)).slice(0, 3);
+      return { skill: "letters", front: "Find the small letter that matches", visual: L.toUpperCase(), speak: `Find the small letter that matches capital ${L.toUpperCase()}`, answer: L, choices: shuffle([L, ...others]) };
+    }
+    const [w, e] = pick(WORDS);
+    const others = shuffle(WORDS.filter(x => x[0] !== w)).slice(0, 3).map(x => x[0]);
+    return { skill: "words", front: "Find the word", visual: e, speak: `Find the word ${w}`, answer: w, choices: shuffle([w, ...others]) };
+  }
+
+  function generateKidCard() {
+    const c = el.playStyle.value === "kreading" ? genReading() : genMath();
+    return { ...c, back: c.answer, hint: "", tag: c.skill, difficulty: 0, imgFront: "", imgBack: "" };
+  }
+
+  function refreshKidUI() {
+    document.body.classList.toggle("kid", kidMode);
+    el.kidPlay.style.display = (kidMode && !running) ? "inline-block" : "none";
+    el.hearIt.style.display = (kidMode && running) ? "inline-block" : "none";
+    if (kidMode && !running) {
+      el.cardText.textContent = "Tap Play to start!";
+      el.cardVisual.textContent = "";
+      el.cardImg.style.display = "none";
+      el.hintBox.style.display = "none";
+      el.choices.innerHTML = "";
+      el.answerArea.style.display = "none";
+      el.faceLabel.textContent = "Ready";
+      el.deckName.textContent = STYLE_NAMES[el.playStyle.value] || "—";
+      el.cardCounter.textContent = `0 / ${KID_ROUND}`;
+    }
+  }
+
+  function fillSkills() {
+    const list = SKILLS[el.playStyle.value] || [];
+    el.skillSel.innerHTML = "";
+    if (!list.length) {
+      const o = document.createElement("option");
+      o.textContent = "Pick a kid play style first";
+      el.skillSel.appendChild(o);
+      return;
+    }
+    for (const s of list) {
+      const o = document.createElement("option");
+      o.value = s.id;
+      o.textContent = s.title;
+      el.skillSel.appendChild(o);
+    }
+  }
+
+  function setStyle() {
+    kidMode = el.playStyle.value !== "classic";
+    running = false;
+    inBoss = false;
+    missQueue = [];
+    if (tickHandle) clearInterval(tickHandle);
+    tickHandle = null;
+    current = null;
+    setTimerDisplay(0);
+    fillSkills();
+    if (kidMode) {
+      el.audio.checked = true;
+      el.setupPanel.classList.add("collapsed");
+      el.mainGrid.classList.add("solo");
+    } else {
+      el.setupPanel.classList.remove("collapsed");
+      el.mainGrid.classList.remove("solo");
+      el.cardVisual.textContent = "";
+      el.choices.innerHTML = "";
+      el.typedRow.style.display = "";
+      el.answerArea.style.display = "none";
+      el.selfScoreRow.style.display = "flex";
+    }
+    refreshKidUI();
+    if (!kidMode) { rebuildFilters(); loadCurrent(pickNextCardRef()); }
+  }
+
+  function startKid() {
+    if (!kidMode) return;
+    running = true;
+    inBoss = false;
+    bossHP = 0;
+    missQueue = [];
+    correct = 0; missed = 0; streak = 0; power = 0;
+    kidCount = 0;
+    if (tickHandle) clearInterval(tickHandle);
+    tickHandle = null;
+    setStatus();
+    refreshKidUI();
+    loadCurrent(pickNextCardRef());
+  }
+
+  function kidNext() {
+    if (!running || !kidMode) return;
+    if (kidCount >= KID_ROUND) { finishKid(); return; }
+    loadCurrent(pickNextCardRef());
+  }
+
+  function finishKid() {
+    running = false;
+    const icon = LOOT[rnd(LOOT.length)];
+    const loot = loadLoot();
+    loot[icon] = (loot[icon] || 0) + 1;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(loot)); } catch {}
+    showModal("All done! 🎉", icon, `You got <b>${correct}</b> right out of ${KID_ROUND}.<br/>You earned a sticker: <b>${icon}</b>`);
+    speak("All done! Great job!");
+    refreshKidUI();
+  }
+
+  function kidChoose(btn, c) {
+    if (!running || kidLock || !current?.card) return;
+    const expected = current.card.answer;
+    const btns = Array.from(el.choices.querySelectorAll("button"));
+    if (normalizeAnswer(c) === normalizeAnswer(expected)) {
+      kidLock = true;
+      btns.forEach(b => { b.disabled = true; });
+      btn.classList.add("right");
+      correct++; streak++; kidCount++;
+      setStatus();
+      speak(pick(["Yes!", "Great job!", "You got it!", "Nice work!"]));
+      setTimeout(kidNext, 1100);
+      return;
+    }
+    kidTries++;
+    btn.disabled = true;
+    btn.classList.add("wrong");
+    if (kidTries >= 2) {
+      kidLock = true;
+      btns.forEach(b => {
+        b.disabled = true;
+        if (normalizeAnswer(b.textContent) === normalizeAnswer(expected)) b.classList.add("right");
+      });
+      missed++; kidCount++;
+      setStatus();
+      el.hintBox.textContent = "It is " + expected + ". We will see this one again!";
+      el.hintBox.style.display = "block";
+      speak("It is " + expected);
+      setTimeout(kidNext, 2000);
+    } else {
+      el.hintBox.textContent = "Try again, you can do it!";
+      el.hintBox.style.display = "block";
+      speak("Try again");
+    }
+  }
+
+  function teachMe() {
+    const list = SKILLS[el.playStyle.value];
+    if (!list) {
+      showModal("Parent companion", "👪", "Choose Kindergarten Reading or 1st Grade Math first.");
+      return;
+    }
+    const s = list.find(x => x.id === el.skillSel.value) || list[0];
+    showModal("Teach me: " + s.title, "👪", "The plain-language lesson for this skill is not written yet. It will be added once the official Common Core text has been checked, and the source link will be shown with it.");
   }
 
   // -----------------------------
@@ -845,7 +1180,7 @@
     if (ok) onCorrect();
     else {
       onMissed();
-      showModal("Not quite", "🧩", `Correct answer: <b>${expected || "—"}</b>`);
+      showModal("Not quite", "🧩", `Correct answer: <b>${esc(expected || "—")}</b>`);
     }
 
     el.typedAnswer.value = "";
@@ -1063,7 +1398,10 @@ Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
   document.querySelectorAll("[data-sprint]").forEach(btn => {
     btn.addEventListener("click", () => startSprint(safeInt(btn.getAttribute("data-sprint"), 120)));
   });
-  el.stop.addEventListener("click", () => { if (running) stopSprint(); });
+  el.stop.addEventListener("click", () => {
+    if (kidMode) { running = false; refreshKidUI(); return; }
+    if (running) stopSprint();
+  });
 
   el.gotIt.addEventListener("click", () => { if (running) onCorrect(); });
   el.missedIt.addEventListener("click", () => { if (running) onMissed(); });
@@ -1089,6 +1427,7 @@ Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
     const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
     if (tag === "input" || tag === "textarea" || tag === "select") return;
 
+    if (kidMode) return;
     const k = e.key.toLowerCase();
     if (k === "h") { e.preventDefault(); useHint(); }
     if (k === "s") { e.preventDefault(); useSkip(); }
@@ -1098,6 +1437,19 @@ Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
   setTimerDisplay(0);
   setStatus();
   updateCounter();
+
+  el.playStyle.addEventListener("change", setStyle);
+  el.toggleAdult.addEventListener("click", () => {
+    const hidden = el.setupPanel.classList.toggle("collapsed");
+    el.mainGrid.classList.toggle("solo", hidden);
+  });
+  el.kidPlay.addEventListener("click", startKid);
+  el.hearIt.addEventListener("click", () => {
+    if (current?.card) speak(current.card.speak || current.card.front, true);
+  });
+  el.teachMe.addEventListener("click", teachMe);
+  el.clearAll.addEventListener("click", refreshKidUI);
+  fillSkills();
 </script>
 </body>
 </html>
