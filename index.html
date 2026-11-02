@@ -5,203 +5,242 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>QuestCards</title>
   <style>
-    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    body { margin: 0; background: #0b0f19; color: #e8eefc; }
-    .wrap { max-width: 1040px; margin: 0 auto; padding: 16px; }
-    .card {
-      background: #121a2b;
-      border: 1px solid rgba(232,238,252,.12);
-      border-radius: 18px;
-      padding: 16px;
-      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    /* Palette: oil-paint pigments. Card faces stay flat and calm for reading. */
+    :root {
+      --ground: #1d2b5e; --ground2: #142046; --slab: #18255a;
+      --cream: #fbf5e4; --cream2: #efe3c2; --ink: #1e1b2e;
+      --cobalt: #2f4fa3; --viridian: #1f7a68; --vermilion: #b8341c; --cadmium: #f2b705;
+      --edge: rgba(30,27,46,.9);
+      font-family: ui-rounded, "Nunito", "Trebuchet MS", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
     }
-    h1 { font-size: 18px; margin: 0 0 10px; letter-spacing: .2px; }
-    .sub { font-size: 12px; opacity: .8; margin-bottom: 10px; }
+    body { margin: 0; background: var(--ground); color: var(--ink); font-size: 18px; min-height: 100vh; }
+
+    /* Impasto layer: knife-laid colour bands, edges roughened, then lit from the upper left. */
+    #paint {
+      position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      filter: url(#impasto);
+      background:
+        linear-gradient(104deg, transparent 0 6%, #2a3f8f 6% 19%, transparent 19%),
+        linear-gradient(97deg,  transparent 0 24%, #1f7a68 24% 33%, transparent 33%),
+        linear-gradient(111deg, transparent 0 46%, #3b5bbd 46% 58%, transparent 58%),
+        linear-gradient(101deg, transparent 0 64%, #f2b705 64% 68%, transparent 68%),
+        linear-gradient(99deg,  transparent 0 80%, #b8341c 80% 90%, transparent 90%),
+        linear-gradient(180deg, var(--ground), var(--ground2));
+    }
+    body.simple #paint { filter: none; }
+
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 16px 16px 170px; }
+    .card {
+      position: relative;
+      background: var(--slab);
+      color: var(--cream);
+      border: 3px solid var(--edge);
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: 0 6px 0 rgba(0,0,0,.45), 0 18px 40px rgba(0,0,0,.35);
+    }
+    h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: .3px; }
+    .sub { font-size: 15px; opacity: .9; margin-bottom: 12px; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .row > * { flex: 0 0 auto; }
-    .btn {
-      background: #223257;
-      color: #e8eefc;
-      border: 1px solid rgba(232,238,252,.18);
-      border-radius: 12px;
-      padding: 10px 12px;
-      cursor: pointer;
-      transition: transform .05s ease;
-      user-select: none;
-    }
-    .btn:active { transform: scale(.98); }
-    .btn.secondary { background: #18223a; }
-    .btn.danger { background: #5b2430; }
-    .btn.good { background: #1f4a34; }
-    .pill {
-      padding: 7px 10px;
-      border-radius: 999px;
-      background: rgba(232,238,252,.08);
-      border: 1px solid rgba(232,238,252,.10);
-      font-size: 12px;
-      color: #d7e0ff;
-    }
-    .hr { height: 1px; background: rgba(232,238,252,.10); margin: 12px 0; }
 
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .btn {
+      background: var(--cobalt);
+      color: var(--cream);
+      border: 2px solid var(--edge);
+      border-radius: 14px;
+      padding: 12px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 0 rgba(0,0,0,.4);
+      transition: transform .06s ease, box-shadow .06s ease;
+      user-select: none;
+      min-height: 44px;
+    }
+    .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.4); }
+    .btn:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--cadmium); outline-offset: 2px; }
+    .btn.secondary { background: var(--cream2); color: var(--ink); }
+    .btn.danger { background: var(--vermilion); color: var(--cream); }
+    .btn.good { background: var(--viridian); color: var(--cream); }
+    .btn:disabled { cursor: default; }
+
+    .pill {
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: var(--cream2);
+      border: 2px solid var(--edge);
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .hr { height: 3px; background: rgba(30,27,46,.18); border-radius: 3px; margin: 14px 0; }
+
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
     @media (min-width: 960px) { .grid { grid-template-columns: 360px 1fr; } }
 
-    .panel { background: #0f1628; border: 1px solid rgba(232,238,252,.12); border-radius: 16px; padding: 12px; }
-    .label { font-size: 12px; opacity: .82; margin-bottom: 6px; }
+    .panel { background: var(--cream); color: var(--ink); border: 3px solid var(--edge); border-radius: 18px; padding: 14px; }
+    .label { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
 
-    input[type="file"] { color: #e8eefc; }
+    input[type="file"] { color: var(--ink); max-width: 100%; }
     textarea {
-      width: 100%;
-      min-height: 90px;
-      border-radius: 14px;
-      padding: 10px;
-      background: #0f1628;
-      color: #e8eefc;
-      border: 1px solid rgba(232,238,252,.14);
-      resize: vertical;
+      width: 100%; box-sizing: border-box; min-height: 90px; border-radius: 12px; padding: 10px;
+      background: #fff; color: var(--ink); border: 2px solid var(--edge); resize: vertical; font: inherit;
     }
     select, input[type="text"] {
-      background: #0f1628;
-      color: #e8eefc;
-      border: 1px solid rgba(232,238,252,.14);
-      border-radius: 12px;
-      padding: 10px 10px;
-      outline: none;
+      background: #fff; color: var(--ink); border: 2px solid var(--edge);
+      border-radius: 12px; padding: 10px; font: inherit; min-height: 44px;
     }
 
+    /* Flat, calm card face. The painted frame sits behind it. */
     .flashcard {
-      border-radius: 18px;
-      background:
-        radial-gradient(1200px 500px at 20% 10%, rgba(124,92,255,.12), transparent 60%),
-        radial-gradient(900px 500px at 90% 90%, rgba(0,210,255,.10), transparent 60%),
-        #0f1628;
-      border: 1px solid rgba(232,238,252,.14);
+      border-radius: 20px;
+      color: var(--ink);
       padding: 16px;
-      min-height: 340px;
+      min-height: 360px;
       display: grid;
       grid-template-rows: auto 1fr auto;
       gap: 10px;
       position: relative;
-      overflow: hidden;
+      isolation: isolate;
     }
+    .flashcard::before {
+      content: ""; position: absolute; inset: -12px; z-index: -1; border-radius: 28px;
+      background:
+        linear-gradient(100deg, #b8341c 0 22%, #f2b705 22% 40%, #1f7a68 40% 63%, #3b5bbd 63% 100%);
+      filter: url(#impasto);
+    }
+    .flashcard::after {
+      content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 20px;
+      background: var(--cream); border: 3px solid var(--edge);
+    }
+    body.simple .flashcard::before { filter: none; }
+
     .topbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
     .bars { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .barWrap { width: 180px; }
-    .barLabel { font-size: 11px; opacity: .8; margin-bottom: 4px; }
-    .bar {
-      height: 10px;
-      border-radius: 999px;
-      background: rgba(232,238,252,.10);
-      border: 1px solid rgba(232,238,252,.12);
-      overflow: hidden;
-    }
-    .bar > div { height: 100%; width: 0%; background: rgba(0,210,255,.55); transition: width .15s ease; }
-    .bar.streak > div { background: rgba(124,92,255,.55); }
+    .barLabel { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+    .bar { height: 14px; border-radius: 999px; background: var(--cream2); border: 2px solid var(--edge); overflow: hidden; }
+    .bar > div { height: 100%; width: 0%; background: var(--cobalt); transition: width .15s ease; }
+    .bar.streak > div { background: var(--vermilion); }
 
     .faceLabel {
-      font-size: 12px;
-      opacity: .8;
-      background: rgba(0,0,0,.25);
-      border: 1px solid rgba(232,238,252,.12);
-      padding: 6px 10px;
-      border-radius: 999px;
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
+      font-size: 14px; background: var(--cream2); border: 2px solid var(--edge);
+      padding: 6px 12px; border-radius: 999px; display: inline-flex; gap: 8px; align-items: center;
     }
 
-    .content {
-      display: grid;
-      place-items: center;
-      text-align: center;
-      padding: 12px;
-      user-select: none;
-    }
-    .bigText {
-      max-width: 900px;
-      line-height: 1.25;
-      font-size: clamp(18px, 2.5vw, 34px);
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-    .img {
-      max-width: min(900px, 92vw);
-      max-height: 280px;
-      border-radius: 14px;
-      margin: 14px auto 0;
-      display: none;
-      border: 1px solid rgba(232,238,252,.14);
-    }
+    .content { display: grid; place-items: center; text-align: center; padding: 12px; user-select: none; }
+    .bigText { max-width: 900px; line-height: 1.25; font-size: clamp(22px, 3vw, 38px); font-weight: 600; white-space: pre-wrap; word-wrap: break-word; }
+    .img { max-width: min(900px, 92vw); max-height: 280px; border-radius: 14px; margin: 14px auto 0; display: none; border: 2px solid var(--edge); }
     .hintBox {
-      display: none;
-      margin-top: 12px;
-      padding: 10px 12px;
-      border-radius: 14px;
-      border: 1px dashed rgba(232,238,252,.18);
-      background: rgba(232,238,252,.06);
-      font-size: 14px;
-      opacity: .92;
-      max-width: 860px;
+      display: none; margin-top: 12px; padding: 10px 14px; border-radius: 14px;
+      border: 2px dashed var(--edge); background: var(--cream2); font-size: 18px; max-width: 860px;
     }
 
     .answerArea { display: grid; gap: 10px; }
-    .choices { display: grid; grid-template-columns: 1fr; gap: 8px; max-width: 740px; margin: 0 auto; }
+    .choices { display: grid; grid-template-columns: 1fr; gap: 10px; width: min(740px, 100%); margin: 0 auto; }
     @media (min-width: 700px) { .choices { grid-template-columns: 1fr 1fr; } }
     .choiceBtn { text-align: left; }
 
-    .footer {
-      display: flex;
-      gap: 10px;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      align-items: center;
-    }
+    .footer { display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap; align-items: center; }
 
-    .modal {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.55);
-      display: none;
-      place-items: center;
-      padding: 16px;
-      z-index: 9999;
-    }
+    .modal { position: fixed; inset: 0; background: rgba(10,14,35,.7); display: none; place-items: center; padding: 16px; z-index: 9999; }
     .modalInner {
-      width: min(620px, 96vw);
-      background: #121a2b;
-      border: 1px solid rgba(232,238,252,.14);
-      border-radius: 18px;
-      padding: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,.55);
+      width: min(620px, 96vw); background: var(--cream); color: var(--ink);
+      border: 3px solid var(--edge); border-radius: 22px; padding: 18px;
+      box-shadow: 0 8px 0 rgba(0,0,0,.45), 0 24px 60px rgba(0,0,0,.55);
     }
-    .modalTitle { font-size: 16px; margin: 0 0 8px; }
-    .loot {
-      font-size: 40px;
-      margin: 8px 0 10px;
-      text-align: center;
-    }
-    .tiny { font-size: 12px; opacity: .82; }
+    .modalTitle { font-size: 22px; margin: 0 0 8px; }
+    .loot { font-size: 56px; margin: 8px 0 10px; text-align: center; }
+    .tiny { font-size: 14px; }
     .k { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
     .bossBadge {
-      display: none;
-      padding: 7px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,120,120,.22);
-      background: rgba(255,120,120,.10);
-      color: #ffd1d1;
-      font-size: 12px;
+      display: none; padding: 7px 12px; border-radius: 999px; border: 2px solid var(--edge);
+      background: var(--vermilion); color: var(--cream); font-size: 14px; font-weight: 700;
+    }
+
+    /* Kid modes */
+    .kidOnly { display: none; }
+    body.kid .kidOnly { display: inline-block; }
+    body.kid .footer { display: none; }
+    body.kid .barWrap, body.kid #timer { display: none; }
+    body.kid .panel.collapsed { display: none; }
+    .grid.solo { grid-template-columns: 1fr; }
+    @media (min-width: 960px) { .grid.solo { grid-template-columns: 1fr; } }
+    .visual { font-size: clamp(36px, 6vw, 60px); line-height: 1.4; margin-top: 10px; word-break: break-word; }
+    .visual.letter { font-size: clamp(80px, 16vw, 150px); font-weight: 700; font-family: Georgia, Cambria, "Times New Roman", serif; }
+    body.kid .bigText { font-size: clamp(26px, 5vw, 46px); }
+    body.kid .choices { grid-template-columns: repeat(2, 1fr); width: min(640px, 100%); }
+    body.kid .choiceBtn {
+      text-align: center; font-size: clamp(30px, 6vw, 52px); padding: 20px 12px; min-height: 92px; border-radius: 22px;
+      background: var(--cobalt); color: var(--cream);
+    }
+    body.kid .choiceBtn.letterChoice { font-family: Georgia, Cambria, "Times New Roman", serif; }
+    .choiceBtn.right { background: var(--viridian) !important; color: var(--cream) !important; outline: 4px solid var(--cadmium); }
+    .choiceBtn.wrong { background: var(--cream2) !important; color: var(--ink) !important; opacity: .55; animation: nudge .35s; }
+    @keyframes nudge { 0%,100% { transform: translateX(0); } 30% { transform: translateX(-6px); } 70% { transform: translateX(6px); } }
+    @media (prefers-reduced-motion: reduce) { .choiceBtn.wrong { animation: none; } .btn, .bar > div { transition: none; } }
+    .bigPlay { font-size: 34px; padding: 18px 40px; border-radius: 26px; }
+
+    /* Effects: slow drips off the bottom of the main card, splatter from the screen edges */
+    .drips { position: absolute; left: 0; right: 0; bottom: 0; height: 0; z-index: 3; pointer-events: none; }
+    .drip {
+      position: absolute; top: -3px; width: var(--w); height: 0; margin-left: calc(var(--w) / -2);
+      background: linear-gradient(90deg, rgba(255,255,255,.3), transparent 38%, rgba(0,0,0,.28)), var(--c);
+      border-radius: 0 0 999px 999px;
+      animation: dripdown var(--dur) cubic-bezier(.3,.1,.4,1) var(--delay) forwards;
+    }
+    .drip::after {
+      content: ""; position: absolute; left: 50%; bottom: calc(var(--w) * -0.55);
+      width: calc(var(--w) * 1.5); height: calc(var(--w) * 1.5); transform: translateX(-50%);
+      border-radius: 50%; background: inherit;
+    }
+    @keyframes dripdown { to { height: var(--len); } }
+    body.calm .drip { animation: none; height: var(--len); }
+    #splat { position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
+    .splatDot {
+      position: absolute; border-radius: 50%;
+      box-shadow: inset -2px -2px 0 rgba(0,0,0,.28), inset 2px 2px 0 rgba(255,255,255,.3);
     }
   </style>
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <filter id="impasto" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.01 0.03" numOctaves="2" seed="4" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="34" xChannelSelector="R" yChannelSelector="G" result="rough"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.006 0.05" numOctaves="3" seed="9" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1.8 -0.35" result="h"/>
+      <feDiffuseLighting in="h" lighting-color="#ffffff" surfaceScale="2.4" diffuseConstant="1.15" result="lit">
+        <feDistantLight azimuth="225" elevation="55"/>
+      </feDiffuseLighting>
+      <feComposite in="rough" in2="lit" operator="arithmetic" k1="1" k2="0" k3="0" k4="0"/>
+    </filter>
+  </svg>
+  <div id="paint" aria-hidden="true"></div>
+  <div id="splat" aria-hidden="true"></div>
   <div class="wrap">
     <div class="card">
+      <div class="drips" id="drips" aria-hidden="true"></div>
       <h1>QuestCards 🃏⚡</h1>
       <div class="sub">Short quests, power-ups, boss battles. No accounts. Nothing leaves the browser.</div>
+      <div class="row" style="margin-bottom:10px;">
+        <button class="btn secondary kidOnly" id="toggleAdult">👪 Grown-ups</button>
+      </div>
 
-      <div class="grid">
-        <div class="panel">
+      <div class="grid" id="mainGrid">
+        <div class="panel" id="setupPanel">
+          <div class="label">Play style</div>
+          <div class="row">
+            <select id="playStyle">
+              <option value="classic">Classic (your own decks)</option>
+              <option value="kreading">Kindergarten Reading</option>
+              <option value="g1math">1st Grade Math</option>
+            </select>
+          </div>
+
+          <div class="hr"></div>
+
           <div class="label">Load decks (TSV or CSV)</div>
           <div class="row">
             <input id="file" type="file" accept=".tsv,text/tab-separated-values,.csv,text/csv" multiple />
@@ -235,6 +274,12 @@
             <label class="pill" style="display:inline-flex; gap:8px; align-items:center;">
               <input id="movement" type="checkbox" checked /> Movement prompts
             </label>
+            <label class="pill" style="display:inline-flex; gap:8px; align-items:center;">
+              <input id="simpleBg" type="checkbox" /> Simple background (faster)
+            </label>
+            <label class="pill" style="display:inline-flex; gap:8px; align-items:center;">
+              <input id="reduceMotion" type="checkbox" /> Reduce motion (no splatter, still drips)
+            </label>
           </div>
 
           <div class="row" style="margin-top:10px;">
@@ -251,6 +296,14 @@
               <option value="self">Self-score (fast)</option>
               <option value="quiz">Quiz (type or choose)</option>
             </select>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="label">Parent companion</div>
+          <div class="row">
+            <select id="skillSel"></select>
+            <button class="btn secondary" id="teachMe">Teach me</button>
           </div>
 
           <div class="hr"></div>
@@ -296,13 +349,18 @@
           <div class="content" id="contentArea">
             <div>
               <div class="bigText" id="cardText">Load a deck and start a sprint.</div>
+              <div class="visual" id="cardVisual"></div>
+              <div style="margin-top:12px;">
+                <button class="btn kidOnly" id="hearIt" style="display:none;">🔊 Hear it</button>
+                <button class="btn good bigPlay kidOnly" id="kidPlay" style="display:none;">▶ Play</button>
+              </div>
               <img class="img" id="cardImg" alt="" />
               <div class="hintBox" id="hintBox"></div>
             </div>
           </div>
 
           <div class="answerArea" id="answerArea" style="display:none;">
-            <div class="row" style="justify-content:center;">
+            <div class="row" id="typedRow" style="justify-content:center;">
               <input id="typedAnswer" type="text" placeholder="Type answer…" style="width:min(520px,92vw);" />
               <button class="btn" id="submitAnswer">Submit</button>
             </div>
@@ -458,6 +516,17 @@
     lootIcon: document.getElementById("lootIcon"),
     modalBody: document.getElementById("modalBody"),
     closeModal: document.getElementById("closeModal"),
+
+    playStyle: document.getElementById("playStyle"),
+    mainGrid: document.getElementById("mainGrid"),
+    setupPanel: document.getElementById("setupPanel"),
+    toggleAdult: document.getElementById("toggleAdult"),
+    cardVisual: document.getElementById("cardVisual"),
+    hearIt: document.getElementById("hearIt"),
+    kidPlay: document.getElementById("kidPlay"),
+    typedRow: document.getElementById("typedRow"),
+    skillSel: document.getElementById("skillSel"),
+    teachMe: document.getElementById("teachMe"),
   };
 
   // decks = [{ name, cards: [{front,back,answer,choices[],hint,tag,difficulty,imgFront,imgBack}] }]
@@ -482,6 +551,12 @@
   let freezeUntil = 0;
 
   let showingBack = false;
+
+  let kidMode = false;
+  let kidCount = 0;
+  let kidTries = 0;
+  let kidLock = false;
+  const KID_ROUND = 10;
 
   const LS_KEY = "questcards_loot_v1";
   const LS_BEST = "questcards_best_v1";
@@ -550,8 +625,8 @@
     el.modal.style.display = "none";
   }
 
-  function speak(text) {
-    if (!el.audio.checked) return;
+  function speak(text, force) {
+    if (!force && !el.audio.checked) return;
     if (!("speechSynthesis" in window)) return;
     const utter = new SpeechSynthesisUtterance(text);
     utter.rate = 1.0;
@@ -571,6 +646,8 @@
 
     const text = showingBack ? cardBackText(card) : cardFrontText(card);
     el.cardText.textContent = text;
+    el.cardVisual.textContent = (!showingBack && card?.visual) ? card.visual : "";
+    el.cardVisual.classList.toggle("letter", card?.skill === "letters");
 
     // Image: front on front, back on back, fall back to whichever exists
     const imgUrl = showingBack ? (card?.imgBack || card?.imgFront || "") : (card?.imgFront || "");
@@ -585,7 +662,8 @@
       el.cardImg.alt = "";
     }
 
-    if (!showingBack && card?.front) speak(card.front);
+    const spoken = card?.speak || card?.front;
+    if (!showingBack && spoken) speak(spoken);
     if (showingBack && (card?.back || card?.answer)) speak(card?.back || card?.answer);
   }
 
@@ -593,6 +671,22 @@
     const mode = el.mode.value;
 
     el.bossBadge.style.display = inBoss ? "inline-flex" : "none";
+
+    if (kidMode) {
+      el.answerArea.style.display = "grid";
+      el.selfScoreRow.style.display = "none";
+      el.typedRow.style.display = "none";
+      el.choices.innerHTML = "";
+      for (const c of (card?.choices || [])) {
+        const b = document.createElement("button");
+        b.className = "btn secondary choiceBtn" + (card?.skill === "letters" ? " letterChoice" : "");
+        b.textContent = c;
+        b.onclick = () => kidChoose(b, c);
+        el.choices.appendChild(b);
+      }
+      return;
+    }
+    el.typedRow.style.display = "";
 
     if (mode === "self") {
       el.answerArea.style.display = "none";
@@ -647,6 +741,7 @@
   }
 
   function pickNextCardRef() {
+    if (kidMode) return { deckIndex: -1, cardIndex: -1, gen: true };
     if (inBoss && missQueue.length) return missQueue.shift();
 
     if (!decks.length) return null;
@@ -671,6 +766,7 @@
   }
 
   function loadCurrent(ref) {
+    if (kidMode && !running) { refreshKidUI(); return; }
     showingBack = false;
     el.btnReveal.textContent = "Reveal answer 👁️";
 
@@ -680,6 +776,18 @@
       el.deckName.textContent = "—";
       el.faceLabel.textContent = "Idle";
       el.cardImg.style.display = "none";
+      return;
+    }
+
+    if (ref.gen) {
+      const gcard = generateKidCard();
+      current = { ...ref, card: gcard };
+      kidTries = 0;
+      kidLock = false;
+      el.cardCounter.textContent = `${Math.min(kidCount + 1, KID_ROUND)} / ${KID_ROUND}`;
+      setCardDisplay(gcard, STYLE_NAMES[el.playStyle.value], "Let's play");
+      setAnswerUI(gcard);
+      setStatus();
       return;
     }
 
@@ -696,6 +804,7 @@
   // Game loop
   // -----------------------------
   function startSprint(seconds) {
+    if (kidMode) { startKid(); return; }
     if (!decks.length) {
       showModal("No deck loaded", "📄", "Load a TSV/CSV deck first.");
       return;
@@ -786,6 +895,7 @@
   }
 
   function useHint() {
+    if (!running) return;
     if (!current?.card) return;
     if (!spendPower(1)) {
       showModal("Not enough power", "⚡", "Earn power by getting answers correct.");
@@ -797,6 +907,7 @@
   }
 
   function useSkip() {
+    if (!running) return;
     if (!current?.card) return;
     if (!spendPower(1)) {
       showModal("Not enough power", "⚡", "Earn power by getting answers correct.");
@@ -815,6 +926,244 @@
     }
     freezeUntil = Date.now() + 10000;
     showModal("Timer frozen", "🧊", "You have 10 seconds where time does not move. Use it like a wizard.");
+  }
+
+  // -----------------------------
+  // Kid modes: generators and handlers
+  // -----------------------------
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  }
+
+  const STYLE_NAMES = { kreading: "Kindergarten Reading", g1math: "1st Grade Math" };
+
+  const SKILLS = {
+    kreading: [
+      { id: "letters", title: "Matching capital and lowercase letters" },
+      { id: "words", title: "Reading simple words" }
+    ],
+    g1math: [
+      { id: "counting", title: "Counting objects" },
+      { id: "add", title: "Adding" },
+      { id: "sub", title: "Subtracting" },
+      { id: "missing", title: "Finding the missing number" }
+    ]
+  };
+
+  const WORDS = [
+    ["cat", "🐱"], ["dog", "🐶"], ["sun", "☀️"], ["bus", "🚌"], ["hat", "🎩"],
+    ["pig", "🐷"], ["bed", "🛏️"], ["fox", "🦊"], ["bug", "🐛"], ["hen", "🐔"],
+    ["map", "🗺️"], ["car", "🚗"], ["bat", "🦇"], ["fish", "🐟"], ["star", "⭐"],
+    ["tree", "🌳"], ["book", "📖"], ["moon", "🌙"]
+  ];
+  const ALPHA = "abcdefghijklmnopqrstuvwxyz".split("");
+  const CONFUSABLE = [["b", "d", "p", "q"], ["m", "n", "w", "u"], ["a", "e", "o", "c"]];
+
+  function rnd(n) { return Math.floor(Math.random() * n); }
+  function pick(a) { return a[rnd(a.length)]; }
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+  function kidLevel() {
+    const d = el.diff.value;
+    return d === "all" ? 1 + rnd(3) : safeInt(d, 1);
+  }
+  function dots(n) {
+    let s = "";
+    for (let i = 1; i <= n; i++) { s += "🍎"; if (i % 5 === 0 && i < n) s += " "; }
+    return s;
+  }
+  function numChoices(ans, max) {
+    const set = new Set([ans]);
+    const near = shuffle([ans - 3, ans - 2, ans - 1, ans + 1, ans + 2, ans + 3].filter(n => n >= 0 && n <= max));
+    for (const n of near) { if (set.size >= 4) break; set.add(n); }
+    for (let n = 0; set.size < 4; n++) set.add(n);
+    return shuffle([...set].map(String));
+  }
+
+  function genMath() {
+    const lvl = kidLevel();
+    const max = lvl === 1 ? 10 : 20;
+    const kind = pick(lvl === 1 ? ["count", "add", "sub"] : lvl === 2 ? ["add", "sub"] : ["missing", "add", "sub"]);
+    if (kind === "count") {
+      const n = 1 + rnd(10);
+      return { skill: "counting", front: "How many?", visual: dots(n), speak: "How many apples do you see?", answer: String(n), choices: numChoices(n, 12) };
+    }
+    if (kind === "add") {
+      const total = 2 + rnd(max - 1);
+      const a = 1 + rnd(total - 1);
+      const b = total - a;
+      return { skill: "add", front: `${a} + ${b} = ?`, visual: lvl === 1 ? `${dots(a)} ➕ ${dots(b)}` : "", speak: `${a} plus ${b}. What is the answer?`, answer: String(total), choices: numChoices(total, max) };
+    }
+    if (kind === "sub") {
+      const a = 2 + rnd(max - 1);
+      const b = 1 + rnd(a - 1);
+      return { skill: "sub", front: `${a} − ${b} = ?`, visual: lvl === 1 ? `${dots(a)}  take away ${b}` : "", speak: `${a} minus ${b}. What is the answer?`, answer: String(a - b), choices: numChoices(a - b, max) };
+    }
+    const total = 3 + rnd(max - 2);
+    const a = 1 + rnd(total - 1);
+    return { skill: "missing", front: `${a} + ? = ${total}`, visual: "", speak: `${a} plus what number makes ${total}?`, answer: String(total - a), choices: numChoices(total - a, max) };
+  }
+
+  function genReading() {
+    if (Math.random() < 0.5) {
+      const L = pick(ALPHA);
+      const group = CONFUSABLE.find(g => g.includes(L));
+      const others = group
+        ? group.filter(x => x !== L)
+        : shuffle(ALPHA.filter(x => x !== L)).slice(0, 3);
+      return { skill: "letters", front: "Find the small letter that matches", visual: L.toUpperCase(), speak: `Find the small letter that matches capital ${L.toUpperCase()}`, answer: L, choices: shuffle([L, ...others]) };
+    }
+    const [w, e] = pick(WORDS);
+    const others = shuffle(WORDS.filter(x => x[0] !== w)).slice(0, 3).map(x => x[0]);
+    return { skill: "words", front: "Find the word", visual: e, speak: `Find the word ${w}`, answer: w, choices: shuffle([w, ...others]) };
+  }
+
+  function generateKidCard() {
+    const c = el.playStyle.value === "kreading" ? genReading() : genMath();
+    return { ...c, back: c.answer, hint: "", tag: c.skill, difficulty: 0, imgFront: "", imgBack: "" };
+  }
+
+  function refreshKidUI() {
+    document.body.classList.toggle("kid", kidMode);
+    el.kidPlay.style.display = (kidMode && !running) ? "inline-block" : "none";
+    el.hearIt.style.display = (kidMode && running) ? "inline-block" : "none";
+    if (kidMode && !running) {
+      el.cardText.textContent = "Tap Play to start!";
+      el.cardVisual.textContent = "";
+      el.cardImg.style.display = "none";
+      el.hintBox.style.display = "none";
+      el.choices.innerHTML = "";
+      el.answerArea.style.display = "none";
+      el.faceLabel.textContent = "Ready";
+      el.deckName.textContent = STYLE_NAMES[el.playStyle.value] || "—";
+      el.cardCounter.textContent = `0 / ${KID_ROUND}`;
+    }
+  }
+
+  function fillSkills() {
+    const list = SKILLS[el.playStyle.value] || [];
+    el.skillSel.innerHTML = "";
+    if (!list.length) {
+      const o = document.createElement("option");
+      o.textContent = "Pick a kid play style first";
+      el.skillSel.appendChild(o);
+      return;
+    }
+    for (const s of list) {
+      const o = document.createElement("option");
+      o.value = s.id;
+      o.textContent = s.title;
+      el.skillSel.appendChild(o);
+    }
+  }
+
+  function setStyle() {
+    kidMode = el.playStyle.value !== "classic";
+    running = false;
+    inBoss = false;
+    missQueue = [];
+    if (tickHandle) clearInterval(tickHandle);
+    tickHandle = null;
+    current = null;
+    setTimerDisplay(0);
+    fillSkills();
+    if (kidMode) {
+      el.audio.checked = true;
+      el.setupPanel.classList.add("collapsed");
+      el.mainGrid.classList.add("solo");
+    } else {
+      el.setupPanel.classList.remove("collapsed");
+      el.mainGrid.classList.remove("solo");
+      el.cardVisual.textContent = "";
+      el.choices.innerHTML = "";
+      el.typedRow.style.display = "";
+      el.answerArea.style.display = "none";
+      el.selfScoreRow.style.display = "flex";
+    }
+    refreshKidUI();
+    if (!kidMode) { rebuildFilters(); loadCurrent(pickNextCardRef()); }
+  }
+
+  function startKid() {
+    if (!kidMode) return;
+    running = true;
+    inBoss = false;
+    bossHP = 0;
+    missQueue = [];
+    correct = 0; missed = 0; streak = 0; power = 0;
+    kidCount = 0;
+    if (tickHandle) clearInterval(tickHandle);
+    tickHandle = null;
+    setStatus();
+    refreshKidUI();
+    loadCurrent(pickNextCardRef());
+  }
+
+  function kidNext() {
+    if (!running || !kidMode) return;
+    if (kidCount >= KID_ROUND) { finishKid(); return; }
+    loadCurrent(pickNextCardRef());
+  }
+
+  function finishKid() {
+    running = false;
+    const icon = LOOT[rnd(LOOT.length)];
+    const loot = loadLoot();
+    loot[icon] = (loot[icon] || 0) + 1;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(loot)); } catch {}
+    showModal("All done! 🎉", icon, `You got <b>${correct}</b> right out of ${KID_ROUND}.<br/>You earned a sticker: <b>${icon}</b>`);
+    splat(true);
+    speak("All done! Great job!");
+    refreshKidUI();
+  }
+
+  function kidChoose(btn, c) {
+    if (!running || kidLock || !current?.card) return;
+    const expected = current.card.answer;
+    const btns = Array.from(el.choices.querySelectorAll("button"));
+    if (normalizeAnswer(c) === normalizeAnswer(expected)) {
+      kidLock = true;
+      btns.forEach(b => { b.disabled = true; });
+      btn.classList.add("right");
+      splat();
+      correct++; streak++; kidCount++;
+      setStatus();
+      speak(pick(["Yes!", "Great job!", "You got it!", "Nice work!"]));
+      setTimeout(kidNext, 1100);
+      return;
+    }
+    kidTries++;
+    btn.disabled = true;
+    btn.classList.add("wrong");
+    if (kidTries >= 2) {
+      kidLock = true;
+      btns.forEach(b => {
+        b.disabled = true;
+        if (normalizeAnswer(b.textContent) === normalizeAnswer(expected)) b.classList.add("right");
+      });
+      missed++; kidCount++;
+      setStatus();
+      el.hintBox.textContent = "It is " + expected + ". We will see this one again!";
+      el.hintBox.style.display = "block";
+      speak("It is " + expected);
+      setTimeout(kidNext, 2000);
+    } else {
+      el.hintBox.textContent = "Try again, you can do it!";
+      el.hintBox.style.display = "block";
+      speak("Try again");
+    }
+  }
+
+  function teachMe() {
+    const list = SKILLS[el.playStyle.value];
+    if (!list) {
+      showModal("Parent companion", "👪", "Choose Kindergarten Reading or 1st Grade Math first.");
+      return;
+    }
+    const s = list.find(x => x.id === el.skillSel.value) || list[0];
+    showModal("Teach me: " + s.title, "👪", "The plain-language lesson for this skill is not written yet. It will be added once the official Common Core text has been checked, and the source link will be shown with it.");
   }
 
   // -----------------------------
@@ -845,7 +1194,7 @@
     if (ok) onCorrect();
     else {
       onMissed();
-      showModal("Not quite", "🧩", `Correct answer: <b>${expected || "—"}</b>`);
+      showModal("Not quite", "🧩", `Correct answer: <b>${esc(expected || "—")}</b>`);
     }
 
     el.typedAnswer.value = "";
@@ -855,6 +1204,7 @@
     correct++;
     streak++;
     power = clamp(power + 1, 0, 5);
+    splat();
 
     if (correct > 0 && correct % 10 === 0) lootDrop();
 
@@ -1063,7 +1413,10 @@ Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
   document.querySelectorAll("[data-sprint]").forEach(btn => {
     btn.addEventListener("click", () => startSprint(safeInt(btn.getAttribute("data-sprint"), 120)));
   });
-  el.stop.addEventListener("click", () => { if (running) stopSprint(); });
+  el.stop.addEventListener("click", () => {
+    if (kidMode) { running = false; refreshKidUI(); return; }
+    if (running) stopSprint();
+  });
 
   el.gotIt.addEventListener("click", () => { if (running) onCorrect(); });
   el.missedIt.addEventListener("click", () => { if (running) onMissed(); });
@@ -1089,6 +1442,7 @@ Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
     const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
     if (tag === "input" || tag === "textarea" || tag === "select") return;
 
+    if (kidMode) return;
     const k = e.key.toLowerCase();
     if (k === "h") { e.preventDefault(); useHint(); }
     if (k === "s") { e.preventDefault(); useSkip(); }
@@ -1098,6 +1452,91 @@ Spell: necessary\tnecessary\tnecessary\t\tDouble s\tspelling\t3\t\t
   setTimerDisplay(0);
   setStatus();
   updateCounter();
+
+  el.playStyle.addEventListener("change", setStyle);
+  el.toggleAdult.addEventListener("click", () => {
+    const hidden = el.setupPanel.classList.toggle("collapsed");
+    el.mainGrid.classList.toggle("solo", hidden);
+  });
+  el.kidPlay.addEventListener("click", startKid);
+  el.hearIt.addEventListener("click", () => {
+    if (current?.card) speak(current.card.speak || current.card.front, true);
+  });
+  el.teachMe.addEventListener("click", teachMe);
+  document.getElementById("simpleBg").addEventListener("change", (e) => document.body.classList.toggle("simple", e.target.checked));
+  el.clearAll.addEventListener("click", refreshKidUI);
+  fillSkills();
+
+  // -----------------------------
+  // Effects: reduce-motion switch, drips, edge splatter
+  // -----------------------------
+  const rmBox = document.getElementById("reduceMotion");
+  try { rmBox.checked = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch {}
+  function applyCalm() { document.body.classList.toggle("calm", rmBox.checked); }
+  rmBox.addEventListener("change", applyCalm);
+  applyCalm();
+
+  (function buildDrips() {
+    const box = document.getElementById("drips");
+    const cols = ["#f2b705", "#1f7a68", "#b8341c", "#5b7be0", "#f2b705"];
+    const N = 15;
+    for (let i = 0; i < N; i++) {
+      const d = document.createElement("div");
+      d.className = "drip";
+      d.style.setProperty("--w", (8 + rnd(9)) + "px");
+      d.style.setProperty("--len", (40 + rnd(100)) + "px");
+      d.style.setProperty("--dur", (20 + rnd(25)) + "s");
+      d.style.setProperty("--delay", (rnd(8000) / 1000) + "s");
+      d.style.setProperty("--c", cols[i % cols.length]);
+      d.style.left = (6 + ((i + 0.5) / N) * 88 + (Math.random() - 0.5) * 3) + "%";
+      box.appendChild(d);
+    }
+  })();
+
+  const SPLAT_COLORS = ["#f2b705", "#1f7a68", "#b8341c", "#5b7be0"];
+  function splatDot(layer, x, y, size, color, dx, dy) {
+    const d = document.createElement("div");
+    d.className = "splatDot";
+    d.style.left = (x - size / 2) + "px";
+    d.style.top = (y - size / 2) + "px";
+    d.style.width = size + "px";
+    d.style.height = size + "px";
+    d.style.background = color;
+    layer.appendChild(d);
+    const a = d.animate([
+      { transform: "translate(0,0) scale(.2)", opacity: 1 },
+      { transform: `translate(${dx}px,${dy}px) scale(1)`, opacity: 1, offset: 0.35 },
+      { transform: `translate(${dx}px,${dy}px) scale(1)`, opacity: 0 }
+    ], { duration: 1600, easing: "cubic-bezier(.2,.7,.3,1)", fill: "forwards" });
+    a.onfinish = () => d.remove();
+  }
+
+  // One bristle-flick burst from a random screen edge (three for a finished round).
+  function splat(big) {
+    if (rmBox.checked) return;
+    const layer = document.getElementById("splat");
+    if (!layer || !layer.animate) return;
+    const W = window.innerWidth, H = window.innerHeight;
+    const bursts = big ? 3 : 1;
+    for (let k = 0; k < bursts; k++) {
+      const edge = rnd(4);
+      const t = 0.15 + Math.random() * 0.7;
+      let x, y, nx, ny;
+      if (edge === 0) { x = W * t; y = 0; nx = 0; ny = 1; }
+      else if (edge === 1) { x = W; y = H * t; nx = -1; ny = 0; }
+      else if (edge === 2) { x = W * t; y = H; nx = 0; ny = -1; }
+      else { x = 0; y = H * t; nx = 1; ny = 0; }
+      const base = Math.atan2(ny, nx);
+      const color = pick(SPLAT_COLORS);
+      splatDot(layer, x, y, 36 + rnd(20), color, 0, 0);
+      for (let i = 0; i < 14; i++) {
+        const ang = base + (Math.random() - 0.5) * Math.PI * 0.9;
+        const dist = 40 + Math.random() * Math.min(W, H) * 0.25;
+        const size = 5 + Math.random() * (i < 4 ? 16 : 9);
+        splatDot(layer, x, y, size, color, Math.cos(ang) * dist, Math.sin(ang) * dist);
+      }
+    }
+  }
 </script>
 </body>
 </html>
